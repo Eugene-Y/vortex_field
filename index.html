@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vortex Field</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      font-family: monospace;
+      color: #888;
+    }
+
+    #fields {
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+    }
+
+    .field-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .field-label {
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    #canvas-container {
+      position: relative;
+      display: inline-block;
+    }
+
+    canvas {
+      display: block;
+      image-rendering: pixelated;
+    }
+
+    #labels {
+      display: flex;
+      justify-content: space-around;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div id="fields">
+    <div id="canvas-container">
+      <canvas id="canvas-main"></canvas>
+      <div id="labels">
+        <span class="field-label">Field A — Velocity</span>
+        <span class="field-label">Field B — Rotation Centers</span>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
