@@ -1,7 +1,7 @@
 'use strict';
 
 import { ShaderProgram } from '../gl/ShaderProgram.js';
-import { PingPongFramebuffer, SingleFramebuffer } from '../gl/Framebuffer.js';
+import { PingPongFramebuffer, SingleFramebuffer, WRAPPING_REPEAT } from '../gl/Framebuffer.js';
 import { GRID_SIZE, PHYSICS_DEFAULTS } from '../config/SimulationConfig.js';
 
 const TEXEL_SIZE = 1.0 / GRID_SIZE;
@@ -20,14 +20,15 @@ export class NavierStokesStep {
     this._gl = gl;
     this._params = { ...PHYSICS_DEFAULTS };
 
+    // Periodic (REPEAT) boundaries: fluid wraps around edges, no artificial walls.
     this._velocity = new PingPongFramebuffer(
-      gl, GRID_SIZE, GRID_SIZE, gl.RG32F, gl.RG, gl.FLOAT
+      gl, GRID_SIZE, GRID_SIZE, gl.RG32F, gl.RG, gl.FLOAT, WRAPPING_REPEAT
     );
     this._pressure = new PingPongFramebuffer(
-      gl, GRID_SIZE, GRID_SIZE, gl.R32F, gl.RED, gl.FLOAT
+      gl, GRID_SIZE, GRID_SIZE, gl.R32F, gl.RED, gl.FLOAT, WRAPPING_REPEAT
     );
     this._divergence = new SingleFramebuffer(
-      gl, GRID_SIZE, GRID_SIZE, gl.R32F, gl.RED, gl.FLOAT
+      gl, GRID_SIZE, GRID_SIZE, gl.R32F, gl.RED, gl.FLOAT, WRAPPING_REPEAT
     );
 
     this._advectProgram        = new ShaderProgram(gl, shaderSources.vert, shaderSources.advect);
