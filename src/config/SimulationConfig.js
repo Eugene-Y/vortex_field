@@ -23,10 +23,16 @@ export const ROTATION_FIELD = {
   accumulationScale: 1.0,
 };
 
+export const RENDER_DEFAULTS = {
+  // Reinhard tone-mapping midpoint: rotation value that maps to 50% brightness.
+  // Increase if field is too bright, decrease if too dark.
+  rotationToneMidpoint: 0.05,
+};
+
 export const COLORS = {
   rotationPositive: [1.0, 0.5, 0.0], // orange — counter-clockwise
   rotationNegative: [0.0, 0.6, 1.0], // blue  — clockwise
-  rotationZero:     [0.0, 0.0, 0.0], // black — no contribution
+  rotationZero: [0.0, 0.0, 0.0], // black — no contribution
 };
 
 // Named physics model identifiers used by PhysicsRegistry.

@@ -9,6 +9,7 @@ uniform int u_mode; // 0 = velocity magnitude, 1 = rotation
 
 uniform vec3 u_colorPositive;
 uniform vec3 u_colorNegative;
+uniform float u_rotationToneMidpoint; // Reinhard midpoint: value that maps to 50% brightness
 
 vec3 hsvToRgb(vec3 hsv) {
   float h = hsv.x * 6.0;
@@ -36,7 +37,10 @@ vec3 mapVelocityToColor(vec2 velocity) {
 }
 
 vec3 mapRotationToColor(float rotation) {
-  float magnitude = clamp(abs(rotation), 0.0, 1.0);
+  // Reinhard tonemapping: x / (x + c). Never saturates, maps [0,∞) → [0,1) smoothly.
+  // At |rotation| = c: brightness = 0.5.
+  float absolute = abs(rotation);
+  float magnitude = absolute / (absolute + u_rotationToneMidpoint);
   if (rotation > 0.0) {
     return u_colorPositive * magnitude;
   } else {

@@ -99,7 +99,10 @@ void main() {
   }
 
   float rotation = computeSignedRotationMagnitude(velocityA, velocityB, center, positionA);
-  v_rotationContribution = rotation * u_accumulationScale;
+  // Each pixel receives ~totalCells contributions on average, so divide by totalCells²
+  // to keep per-pixel sums O(velocity * armLength) regardless of grid size.
+  float normalization = float(totalCells) * float(totalCells);
+  v_rotationContribution = rotation * u_accumulationScale / normalization;
 
   // Map center grid position to clip space.
   // No +0.5 offset: a float grid coord c maps to screen coord c, which rounds to pixel floor(c).

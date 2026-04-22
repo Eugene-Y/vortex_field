@@ -1,7 +1,7 @@
 'use strict';
 
 import { ShaderProgram } from '../gl/ShaderProgram.js';
-import { COLORS } from '../config/SimulationConfig.js';
+import { COLORS, RENDER_DEFAULTS } from '../config/SimulationConfig.js';
 
 const RENDER_MODE_VELOCITY = 0;
 const RENDER_MODE_ROTATION = 1;
@@ -32,6 +32,7 @@ export class FieldRenderer {
     this._program.setUniform1i('u_mode', mode);
     this._program.setUniform3f('u_colorPositive', ...COLORS.rotationPositive);
     this._program.setUniform3f('u_colorNegative', ...COLORS.rotationNegative);
+    this._program.setUniform1f('u_rotationToneMidpoint', RENDER_DEFAULTS.rotationToneMidpoint);
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, texture);
