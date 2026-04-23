@@ -7,6 +7,9 @@ import { MOUSE_DEFAULTS, GRID_SIZE } from '../config/SimulationConfig.js';
 const INJECTION_STEP_FRACTION = 0.75;
 
 const PATTERNS = [
+  { value: 'disk-spin',    label: 'Disk — spin'        },
+  { value: 'disk-explode', label: 'Disk — explode'     },
+  { value: 'disk-implode', label: 'Disk — implode'     },
   { value: 'circle',    label: 'Circle'                },
   { value: 'triangle',  label: 'Triangle'              },
   { value: 'square',    label: 'Square'                },
@@ -131,6 +134,9 @@ export class PatternInjector {
       this._injectPolygon(center, sides, quadVao);
       return;
     }
+    if (action === 'disk-spin')    this._injectFilledDisk(center, 'spin', quadVao);
+    if (action === 'disk-explode') this._injectFilledDisk(center, 'explode', quadVao);
+    if (action === 'disk-implode') this._injectFilledDisk(center, 'implode', quadVao);
     if (action === 'stripes')   this._injectStripes(center, quadVao);
     if (action === 'gridlines') this._injectSquareGridLines(center, quadVao);
     if (action === 'trilines')  this._injectTriangularGridLines(center, quadVao);
@@ -196,6 +202,36 @@ export class PatternInjector {
           vertexA[1] + t * sideVec[1],
         ];
         this._fluidField.injectImpulse(position, direction, brushRadius, strength, quadVao);
+      }
+    }
+  }
+
+  // Fills a disk via a grid scan — iterates a square bounding box, skips points outside the radius.
+  // mode='spin' → CCW tangential velocity, mode='explode' → radial outward velocity.
+  _injectFilledDisk(center, mode, quadVao) {
+    const patternRadius = MOUSE_DEFAULTS.patternScale * 0.5;
+    const brushRadius   = MOUSE_DEFAULTS.impulseRadius;
+    const strength      = MOUSE_DEFAULTS.impulseStrength;
+    const stepUv        = (brushRadius * INJECTION_STEP_FRACTION) / GRID_SIZE;
+
+    for (let dy = -patternRadius; dy <= patternRadius; dy += stepUv) {
+      for (let dx = -patternRadius; dx <= patternRadius; dx += stepUv) {
+        const distSq = dx * dx + dy * dy;
+        if (distSq > patternRadius * patternRadius) continue;
+
+        const angle     = Math.atan2(dy, dx);
+        const direction = mode === 'spin'
+          ? [-Math.sin(angle),  Math.cos(angle)]  // CCW tangent
+          : mode === 'explode'
+          ? [ Math.cos(angle),  Math.sin(angle)]  // radial outward
+          : [-Math.cos(angle), -Math.sin(angle)]; // radial inward
+        this._fluidField.injectImpulse(
+          [center[0] + dx, center[1] + dy],
+          direction,
+          brushRadius,
+          strength,
+          quadVao,
+        );
       }
     }
   }
