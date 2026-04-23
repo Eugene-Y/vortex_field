@@ -158,6 +158,20 @@ async function main() {
   let animationFrameId = null;
   let paused = false;
 
+  function renderFields() {
+    rotationField.recomputeFrom(fluidField.velocityTexture);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+
+    gl.viewport(0, 0, CANVAS_FIELD_SIZE, CANVAS_FIELD_SIZE);
+    renderer.renderVelocityField(fluidField.velocityTexture, quadVao);
+
+    gl.viewport(CANVAS_FIELD_SIZE + DISPLAY_GAP, 0, CANVAS_FIELD_SIZE, CANVAS_FIELD_SIZE);
+    renderer.renderRotationField(rotationField.rotationTexture, quadVao);
+  }
+
   function renderFrame(currentTime) {
     const baseDeltaTime = Math.min((currentTime - previousTime) / 1000, 0.05);
     const deltaTime = baseDeltaTime * PHYSICS_DEFAULTS.simulationSpeed;
@@ -167,19 +181,7 @@ async function main() {
     patternInjector.applyPendingPattern(quadVao);
 
     fluidField.step(deltaTime, quadVao);
-    rotationField.recomputeFrom(fluidField.velocityTexture);
-
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.clearColor(0, 0, 0, 1);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-
-    // Left half: Field A — velocity
-    gl.viewport(0, 0, CANVAS_FIELD_SIZE, CANVAS_FIELD_SIZE);
-    renderer.renderVelocityField(fluidField.velocityTexture, quadVao);
-
-    // Right half: Field B — rotation centers (offset by gap)
-    gl.viewport(CANVAS_FIELD_SIZE + DISPLAY_GAP, 0, CANVAS_FIELD_SIZE, CANVAS_FIELD_SIZE);
-    renderer.renderRotationField(rotationField.rotationTexture, quadVao);
+    renderFields();
 
     animationFrameId = requestAnimationFrame(renderFrame);
   }
@@ -215,7 +217,10 @@ async function main() {
   });
 
   document.getElementById('pause-button').addEventListener('click', togglePause);
-  document.getElementById('reset-button').addEventListener('click', () => fluidField.reset());
+  document.getElementById('clear-button').addEventListener('click', () => fluidField.reset());
+  document.getElementById('reset-button').addEventListener('click', () => {
+    window.location.href = window.location.pathname;
+  });
 
   document.getElementById('copy-url-button').addEventListener('click', () => {
     navigator.clipboard.writeText(buildShareUrl());
@@ -223,6 +228,7 @@ async function main() {
 
   document.addEventListener('input', () => {
     history.replaceState(null, '', buildShareUrl());
+    if (paused) renderFields();
   });
 
   const gridSizeInput = document.getElementById('grid-size-input');

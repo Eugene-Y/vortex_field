@@ -13,9 +13,13 @@ const DEFAULTS = {
   brushStrength: 100.0,
   patternScale:  0.5,
   pairRange:     1.0,
-  velBrightness: 30.0,
-  rotBrightness: 0.3,
+  velBrightness: 50,   // slider position 0–100
+  rotBrightness: 50,   // slider position 0–100
 };
+
+const VEL_TONE_BASE     = 30.0;
+const ROT_TONE_BASE     = 0.3;
+const BRIGHTNESS_LOG_RANGE = 3;
 
 export const GRID_SIZE = _int('gridSize', DEFAULTS.gridSize, 32, 512);
 
@@ -42,14 +46,20 @@ export const ROTATION_FIELD = {
   pairRange:         _float('pairRange', DEFAULTS.pairRange),
 };
 
+const velBrightnessPos = _int('velBrightness', DEFAULTS.velBrightness, 0, 100);
+const rotBrightnessPos = _int('rotBrightness', DEFAULTS.rotBrightness, 0, 100);
+
+const brightnessToTone = (base, pos) =>
+  base * Math.exp(BRIGHTNESS_LOG_RANGE * (50 - pos) / 50);
+
 export const RENDER_DEFAULTS = {
-  velocityToneMidpoint: _float('velBrightness', DEFAULTS.velBrightness),
-  rotationToneMidpoint: _float('rotBrightness', DEFAULTS.rotBrightness),
+  velocityToneMidpoint: brightnessToTone(VEL_TONE_BASE, velBrightnessPos),
+  rotationToneMidpoint: brightnessToTone(ROT_TONE_BASE, rotBrightnessPos),
 };
 
-export const RENDER_BRIGHTNESS_DEFAULTS = {
-  velocityToneMidpoint: DEFAULTS.velBrightness,
-  rotationToneMidpoint: DEFAULTS.rotBrightness,
+export const BRIGHTNESS_SLIDER_POSITIONS = {
+  velocity: velBrightnessPos,
+  rotation: rotBrightnessPos,
 };
 
 export function buildShareUrl() {
@@ -61,8 +71,8 @@ export function buildShareUrl() {
     brushStrength: MOUSE_DEFAULTS.impulseStrength.toPrecision(3),
     patternScale:  MOUSE_DEFAULTS.patternScale.toPrecision(3),
     pairRange:     ROTATION_FIELD.pairRange.toPrecision(3),
-    velBrightness: RENDER_DEFAULTS.velocityToneMidpoint.toPrecision(3),
-    rotBrightness: RENDER_DEFAULTS.rotationToneMidpoint.toPrecision(3),
+    velBrightness: velBrightnessPos,
+    rotBrightness: rotBrightnessPos,
   });
   return `${window.location.origin}${window.location.pathname}?${params}`;
 }

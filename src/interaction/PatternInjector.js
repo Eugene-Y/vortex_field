@@ -84,6 +84,7 @@ export class PatternInjector {
       const option = document.createElement('option');
       option.value = value;
       option.textContent = text;
+      if (value === 'circle') option.selected = true;
       select.appendChild(option);
     }
 
