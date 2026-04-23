@@ -31,11 +31,11 @@ vec2 gridIndexToPosition(int index) {
 }
 
 // Shortest displacement from → to on a periodic grid.
-// Wraps each component to (-gridSize/2, gridSize/2] via round().
+// Uses floor() instead of round() to avoid tie-bias at exactly ±gridSize/2.
 vec2 periodicDisplacement(vec2 from, vec2 to) {
   float gridSize = float(u_gridSize);
   vec2 delta = to - from;
-  delta -= gridSize * round(delta / gridSize);
+  delta -= gridSize * floor((delta + 0.5 * gridSize) / gridSize);
   return delta;
 }
 
@@ -67,7 +67,8 @@ vec2 computeInstantaneousRotationCenter(
   vec2 rawCenter = positionA + t * normalA;
 
   // Wrap to [0, gridSize) so the contribution lands in the correct periodic cell.
-  return mod(rawCenter, float(u_gridSize));
+  float gridSize = float(u_gridSize);
+  return rawCenter - gridSize * floor(rawCenter / gridSize);
 }
 
 // ω = (arm × vA) / |arm|²  where arm is the vector from center to positionA.
@@ -117,7 +118,17 @@ void main() {
   );
 
   // After mod(), center is always in [0, gridSize) — only discard true invalids.
-  if (isinf(center.x) || isnan(center.x)) {
+  if (isinf(center.x) || isnan(center.x) || isinf(center.y) || isnan(center.y)) {
+    gl_Position = vec4(2.0, 2.0, 0.0, 1.0);
+    gl_PointSize = 0.0;
+    v_rotationContribution = 0.0;
+    return;
+  }
+
+  // Discard pairs where the center coincides with either cell — the ω formula
+  // is degenerate there (zero arm), and such pairs cause spurious boundary spikes.
+  vec2 armB = periodicDisplacement(center, positionB);
+  if (dot(armB, armB) < 0.01) {
     gl_Position = vec4(2.0, 2.0, 0.0, 1.0);
     gl_PointSize = 0.0;
     v_rotationContribution = 0.0;
@@ -127,7 +138,8 @@ void main() {
   float omega = computeAngularVelocity(velocityA, center, positionA);
   v_rotationContribution = omega * u_accumulationScale / float(totalCells);
 
-  vec2 clipPosition = center / float(u_gridSize) * 2.0 - 1.0;
+  // +0.5 maps integer grid positions to pixel centers, not pixel edges.
+  vec2 clipPosition = (center + 0.5) / float(u_gridSize) * 2.0 - 1.0;
   gl_Position = vec4(clipPosition, 0.0, 1.0);
   gl_PointSize = 1.0;
 }
