@@ -22,6 +22,10 @@ export const ROTATION_FIELD = {
   // Numerically: |v_i × v_j| / (|v_i| * |v_j|) < threshold → discard.
   parallelThreshold: 0.001,
   accumulationScale: 1.0,
+  // Normalized interaction range [0, 1]. For each pair (A, B), B is included only
+  // if its periodic distance from A is ≤ pairRange * gridSize / 2 (diameter = pairRange * gridSize).
+  // At 1.0 all pairs within the inscribed circle contribute; at 0 none do.
+  pairRange: 1.0,
 };
 
 export const RENDER_DEFAULTS = {

@@ -73,6 +73,10 @@ src/
 This is not a "quick JS demo". The fact that the output is a browser app does not
 excuse sloppy code. The following rules apply without exception.
 
+**Git**
+- Do NOT run `git commit` (or any destructive git command) without an explicit instruction
+  from the user. Make the change, describe what was done, and wait.
+
 **Naming**
 - Every function name must describe what it does, not how.
   `stepNavierStokes()` not `update()`.
@@ -157,6 +161,7 @@ export const MOUSE_DEFAULTS = {
 export const ROTATION_FIELD = {
   parallelThreshold: 0.001,  // below this cross-product magnitude → discard pair
   accumulationScale: 1.0,
+  pairRange: 1.0,             // interaction radius as fraction of gridSize/2 (see below)
 };
 
 export const RENDER_DEFAULTS = {
@@ -244,6 +249,29 @@ The code must be written so the following changes require minimal surgery:
 **Adding a new color map:**
 - Add a named function to a `ColorMap.js` module
 - Pass it as a parameter to `FieldRenderer`
+
+## Pair Interaction Range
+
+`ROTATION_FIELD.pairRange` (slider "Pair range" under Field B, range 0–1) limits which
+pairs contribute to Field B. For a pair (A, B), B is included only if its periodic
+minimum-image distance from A satisfies:
+
+```
+|d_AB| ≤ pairRange × gridSize / 2
+```
+
+Equivalently, the interaction **diameter** is `pairRange × gridSize`.
+
+- At **1.0** all pairs within the inscribed circle of the periodic grid contribute.
+  Corner pairs whose distance exceeds `gridSize/2` are excluded at all range values
+  (they are the diagonal extremes of the periodic torus and represent ≈22% of all pairs).
+- At **0.5** only pairs within `gridSize/4` radius contribute — a quarter of the field.
+- At **→ 0** the field goes dark (no contributing pairs).
+
+The discard is a single early-return in the vertex shader (`rotation_accumulate.vert`).
+The draw call still submits `GRID_SIZE⁴` vertices, so GPU work does not decrease with
+smaller range — only fragment writes and blending are skipped. A future optimisation
+could reduce the draw count for very small ranges.
 
 ## Known Limitations
 

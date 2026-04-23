@@ -10,6 +10,11 @@ uniform sampler2D u_velocity;
 uniform int u_gridSize;
 uniform float u_parallelThreshold;
 uniform float u_accumulationScale;
+// Normalized interaction range [0, 1]. Pairs whose periodic distance exceeds
+// pairRange * gridSize / 2 are discarded (diameter = pairRange * gridSize).
+// At 1.0 only pairs within the inscribed circle contribute; corner pairs
+// (distance > gridSize/2) are excluded at all range values.
+uniform float u_pairRange;
 
 out float v_rotationContribution;
 
@@ -95,6 +100,17 @@ void main() {
   vec2 velocityB = texture(u_velocity, uvB).xy;
   vec2 positionA = gridIndexToPosition(indexA);
   vec2 positionB = gridIndexToPosition(indexB);
+
+  // Discard pairs whose periodic distance exceeds the configured range.
+  // Diameter = pairRange * gridSize, so radius = pairRange * gridSize / 2.
+  float rangeRadius = u_pairRange * float(u_gridSize) * 0.5;
+  vec2  pairDisplacement = periodicDisplacement(positionA, positionB);
+  if (dot(pairDisplacement, pairDisplacement) > rangeRadius * rangeRadius) {
+    gl_Position = vec4(2.0, 2.0, 0.0, 1.0);
+    gl_PointSize = 0.0;
+    v_rotationContribution = 0.0;
+    return;
+  }
 
   vec2 center = computeInstantaneousRotationCenter(
     positionA, velocityA, positionB, velocityB

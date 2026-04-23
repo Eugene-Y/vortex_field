@@ -42,6 +42,7 @@ export class PairRotationKernel {
     this._program.setUniform1i('u_gridSize', GRID_SIZE);
     this._program.setUniform1f('u_parallelThreshold', ROTATION_FIELD.parallelThreshold);
     this._program.setUniform1f('u_accumulationScale', ROTATION_FIELD.accumulationScale);
+    this._program.setUniform1f('u_pairRange', ROTATION_FIELD.pairRange);
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, velocityTexture);

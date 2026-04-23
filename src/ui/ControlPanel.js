@@ -1,6 +1,6 @@
 'use strict';
 
-import { RENDER_DEFAULTS, PHYSICS_DEFAULTS, MOUSE_DEFAULTS } from '../config/SimulationConfig.js';
+import { RENDER_DEFAULTS, PHYSICS_DEFAULTS, MOUSE_DEFAULTS, ROTATION_FIELD } from '../config/SimulationConfig.js';
 
 const BRIGHTNESS_LOG_RANGE = 3; // ±e^3 ≈ 20x around default
 
@@ -12,6 +12,10 @@ export class ControlPanel {
 
     this._addBrightnessSlider(velocityContainer, 'Brightness', RENDER_DEFAULTS, 'velocityToneMidpoint');
     this._addBrightnessSlider(rotationContainer, 'Brightness', RENDER_DEFAULTS, 'rotationToneMidpoint');
+    this._addLinearSlider(rotationContainer, 'Pair range', 0, 1,
+      () => ROTATION_FIELD.pairRange,
+      v  => { ROTATION_FIELD.pairRange = v; }
+    );
 
     this._buildPhysicsSliders(physicsContainer);
   }
@@ -42,6 +46,25 @@ export class ControlPanel {
       formatValue: null,
       onChange: sliderValue => {
         config[key] = defaultMidpoint * Math.exp(BRIGHTNESS_LOG_RANGE * (50 - sliderValue) / 50);
+      },
+    });
+  }
+
+  // Linear slider. getValue/setValue work in the natural value space.
+  _addLinearSlider(container, label, min, max, getValue, setValue) {
+    const defaultValue       = getValue();
+    const initialSliderValue = Math.round((defaultValue - min) / (max - min) * 100);
+
+    this._addSlider({
+      container,
+      label,
+      initialSliderValue: Math.max(0, Math.min(100, initialSliderValue)),
+      formatValue: sliderValue => {
+        const v = min + (max - min) * sliderValue / 100;
+        return v.toFixed(2);
+      },
+      onChange: sliderValue => {
+        setValue(min + (max - min) * sliderValue / 100);
       },
     });
   }
