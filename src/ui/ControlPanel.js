@@ -2,6 +2,7 @@
 
 import { RENDER_DEFAULTS, BRIGHTNESS_SLIDER_POSITIONS, PHYSICS_DEFAULTS, MOUSE_DEFAULTS, ROTATION_FIELD } from '../config/SimulationConfig.js';
 
+
 const VEL_TONE_BASE     = 30.0;
 const ROT_TONE_BASE     = 0.3;
 const BRIGHTNESS_LOG_RANGE = 3;
@@ -12,8 +13,8 @@ export class ControlPanel {
     rotationContainer.style.width = `${fieldSize}px`;
     velocityContainer.parentElement.style.gap = `${gapSize}px`;
 
-    this._addBrightnessSlider(velocityContainer, 'Brightness', RENDER_DEFAULTS, 'velocityToneMidpoint', VEL_TONE_BASE, BRIGHTNESS_SLIDER_POSITIONS.velocity);
-    this._addBrightnessSlider(rotationContainer, 'Brightness', RENDER_DEFAULTS, 'rotationToneMidpoint', ROT_TONE_BASE, BRIGHTNESS_SLIDER_POSITIONS.rotation);
+    this._addBrightnessSlider(velocityContainer, 'Brightness', RENDER_DEFAULTS, 'velocityToneMidpoint', VEL_TONE_BASE, BRIGHTNESS_SLIDER_POSITIONS.velocity, 'velocity');
+    this._addBrightnessSlider(rotationContainer, 'Brightness', RENDER_DEFAULTS, 'rotationToneMidpoint', ROT_TONE_BASE, BRIGHTNESS_SLIDER_POSITIONS.rotation, 'rotation');
 
     this._buildPhysicsSliders(physicsContainer);
   }
@@ -50,15 +51,18 @@ export class ControlPanel {
     );
   }
 
-  _addBrightnessSlider(container, label, config, key, toneBase, initialSliderValue) {
+  _addBrightnessSlider(container, label, config, key, toneBase, initialSliderValue, positionKey) {
+    const applyPosition = sliderValue => {
+      config[key] = toneBase * Math.exp(BRIGHTNESS_LOG_RANGE * (50 - sliderValue) / 50);
+      BRIGHTNESS_SLIDER_POSITIONS[positionKey] = sliderValue;
+    };
+    applyPosition(initialSliderValue);
     this._addSlider({
       container,
       label,
       initialSliderValue,
       formatValue: null,
-      onChange: sliderValue => {
-        config[key] = toneBase * Math.exp(BRIGHTNESS_LOG_RANGE * (50 - sliderValue) / 50);
-      },
+      onChange: applyPosition,
     });
   }
 

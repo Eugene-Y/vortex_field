@@ -71,8 +71,8 @@ export function buildShareUrl() {
     brushStrength: MOUSE_DEFAULTS.impulseStrength.toPrecision(3),
     patternScale:  MOUSE_DEFAULTS.patternScale.toPrecision(3),
     pairRange:     ROTATION_FIELD.pairRange.toPrecision(3),
-    velBrightness: velBrightnessPos,
-    rotBrightness: rotBrightnessPos,
+    velBrightness: BRIGHTNESS_SLIDER_POSITIONS.velocity,
+    rotBrightness: BRIGHTNESS_SLIDER_POSITIONS.rotation,
   });
   return `${window.location.origin}${window.location.pathname}?${params}`;
 }
