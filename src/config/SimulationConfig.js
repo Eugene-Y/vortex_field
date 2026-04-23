@@ -1,6 +1,7 @@
 'use strict';
 
-export const GRID_SIZE = 100;
+const _gridSizeParam = new URLSearchParams(window.location.search).get('gridSize');
+export const GRID_SIZE = _gridSizeParam ? Math.max(32, Math.min(512, parseInt(_gridSizeParam, 10))) : 64;
 
 export const DISPLAY_SCALE = 8; // pixels per grid cell
 export const DISPLAY_GAP = 32; // pixel gap between the two fields

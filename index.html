@@ -140,6 +140,34 @@
       color: #bbb;
     }
 
+    #grid-size-input {
+      background: none;
+      border: 1px solid #555;
+      color: #888;
+      font-family: monospace;
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 4px 8px;
+      width: 54px;
+      text-align: center;
+    }
+
+    #grid-size-input:focus {
+      outline: none;
+      border-color: #888;
+      color: #bbb;
+    }
+
+    #grid-size-input::-webkit-outer-spin-button,
+    #grid-size-input::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+    }
+
+    #grid-size-input[type=number] {
+      -moz-appearance: textfield;
+    }
+
     #description {
       margin-top: 28px;
       max-width: 720px;
@@ -156,6 +184,7 @@
   <div id="top-bar">
     <button id="pause-button">Pause</button>
     <button id="reset-button">Reset</button>
+    <input id="grid-size-input" type="number" min="32" max="512" />
   </div>
   <div id="fields">
     <div id="canvas-container">
