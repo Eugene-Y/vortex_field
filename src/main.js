@@ -5,7 +5,7 @@ import { FluidField }       from './simulation/FluidField.js';
 import { RotationField }    from './simulation/RotationField.js';
 import { FieldRenderer }    from './rendering/FieldRenderer.js';
 import { MouseInjector }    from './interaction/MouseInjector.js';
-import { GRID_SIZE, DISPLAY_SCALE } from './config/SimulationConfig.js';
+import { GRID_SIZE, DISPLAY_SCALE, DISPLAY_GAP } from './config/SimulationConfig.js';
 
 const CANVAS_FIELD_SIZE = GRID_SIZE * DISPLAY_SCALE;
 
@@ -62,10 +62,10 @@ async function loadAllShaders() {
 }
 
 function configureCanvas(canvas) {
-  // Two fields side by side in one canvas — single GL context, no cross-context texture sharing.
-  canvas.width  = CANVAS_FIELD_SIZE * 2;
+  // Two fields side by side with a gap — single GL context, no cross-context texture sharing.
+  canvas.width  = CANVAS_FIELD_SIZE * 2 + DISPLAY_GAP;
   canvas.height = CANVAS_FIELD_SIZE;
-  canvas.style.width  = `${CANVAS_FIELD_SIZE * 2}px`;
+  canvas.style.width  = `${CANVAS_FIELD_SIZE * 2 + DISPLAY_GAP}px`;
   canvas.style.height = `${CANVAS_FIELD_SIZE}px`;
 }
 
@@ -107,13 +107,15 @@ async function main() {
     rotationField.recomputeFrom(fluidField.velocityTexture);
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
 
     // Left half: Field A — velocity
     gl.viewport(0, 0, CANVAS_FIELD_SIZE, CANVAS_FIELD_SIZE);
     renderer.renderVelocityField(fluidField.velocityTexture, quadVao);
 
-    // Right half: Field B — rotation centers
-    gl.viewport(CANVAS_FIELD_SIZE, 0, CANVAS_FIELD_SIZE, CANVAS_FIELD_SIZE);
+    // Right half: Field B — rotation centers (offset by gap)
+    gl.viewport(CANVAS_FIELD_SIZE + DISPLAY_GAP, 0, CANVAS_FIELD_SIZE, CANVAS_FIELD_SIZE);
     renderer.renderRotationField(rotationField.rotationTexture, quadVao);
 
     requestAnimationFrame(renderFrame);

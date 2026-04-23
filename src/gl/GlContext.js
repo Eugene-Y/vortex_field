@@ -16,6 +16,8 @@ export function createGlContext(canvas) {
   }
 
   requireExtension(gl, 'EXT_color_buffer_float');
+  // Required for additive blending into float framebuffers (rotation accumulation).
+  requireExtension(gl, 'EXT_float_blend');
 
   return gl;
 }

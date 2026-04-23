@@ -1,8 +1,9 @@
 'use strict';
 
-export const GRID_SIZE = 64;
+export const GRID_SIZE = 50;
 
 export const DISPLAY_SCALE = 8; // pixels per grid cell
+export const DISPLAY_GAP = 32; // pixel gap between the two fields
 
 export const PHYSICS_DEFAULTS = {
   viscosity: 0.1,
@@ -12,8 +13,8 @@ export const PHYSICS_DEFAULTS = {
 };
 
 export const MOUSE_DEFAULTS = {
-  impulseRadius: 5.0,
-  impulseStrength: 200.0,
+  impulseRadius: 2.0,
+  impulseStrength: 100.0,
 };
 
 export const ROTATION_FIELD = {
@@ -26,7 +27,7 @@ export const ROTATION_FIELD = {
 export const RENDER_DEFAULTS = {
   // Reinhard tone-mapping midpoint: rotation value that maps to 50% brightness.
   // Increase if field is too bright, decrease if too dark.
-  rotationToneMidpoint: 0.05,
+  rotationToneMidpoint: 0.3,
 };
 
 export const COLORS = {

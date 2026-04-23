@@ -59,11 +59,17 @@ vec2 computeInstantaneousRotationCenter(
   return positionA + t * normalA;
 }
 
-float computeSignedRotationMagnitude(vec2 velocityA, vec2 velocityB, vec2 center, vec2 positionA) {
-  // Sign: cross product of (positionA - center) with velocityA
-  // Positive = counter-clockwise, negative = clockwise.
+// Returns the angular velocity ω at the rotation center, estimated from cell A.
+// arm × vA = ω · |arm|², so ω = (arm × vA) / |arm|².
+// Returns 0 if arm is degenerate (center too close to positionA).
+float computeAngularVelocity(vec2 velocityA, vec2 center, vec2 positionA) {
   vec2 arm = positionA - center;
-  return arm.x * velocityA.y - arm.y * velocityA.x;
+  float armLengthSquared = dot(arm, arm);
+  if (armLengthSquared < 0.01) {
+    return 0.0; // degenerate: center coincides with positionA
+  }
+  float crossProduct = arm.x * velocityA.y - arm.y * velocityA.x;
+  return crossProduct / armLengthSquared;
 }
 
 void main() {
@@ -98,11 +104,9 @@ void main() {
     return;
   }
 
-  float rotation = computeSignedRotationMagnitude(velocityA, velocityB, center, positionA);
-  // Each pixel receives ~totalCells contributions on average, so divide by totalCells²
-  // to keep per-pixel sums O(velocity * armLength) regardless of grid size.
-  float normalization = float(totalCells) * float(totalCells);
-  v_rotationContribution = rotation * u_accumulationScale / normalization;
+  float omega = computeAngularVelocity(velocityA, center, positionA);
+  // Divide by totalCells so the per-pixel sum is the average ω over contributing pairs.
+  v_rotationContribution = omega * u_accumulationScale / float(totalCells);
 
   // Map center grid position to clip space.
   // No +0.5 offset: a float grid coord c maps to screen coord c, which rounds to pixel floor(c).
