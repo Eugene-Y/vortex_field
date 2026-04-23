@@ -7,18 +7,45 @@ out vec4 fragColor;
 uniform sampler2D u_velocity;
 uniform sampler2D u_pressure;
 uniform float u_texelSize;
+uniform int u_boundary;
 
-// Subtract the pressure gradient to enforce incompressibility (∇·u = 0).
+float samplePressure(vec2 uv) {
+  if (u_boundary == 0) return texture(u_pressure, fract(uv)).r;
+  if (u_boundary == 1 &&
+      (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)) return 0.0;
+  return texture(u_pressure, clamp(uv, 0.0, 1.0)).r;
+}
+
 vec2 subtractPressureGradient(vec2 uv) {
-  float left  = texture(u_pressure, uv + vec2(-u_texelSize, 0.0)).r;
-  float right = texture(u_pressure, uv + vec2( u_texelSize, 0.0)).r;
-  float bottom = texture(u_pressure, uv + vec2(0.0, -u_texelSize)).r;
-  float top    = texture(u_pressure, uv + vec2(0.0,  u_texelSize)).r;
+  float left   = samplePressure(uv + vec2(-u_texelSize, 0.0));
+  float right  = samplePressure(uv + vec2( u_texelSize, 0.0));
+  float bottom = samplePressure(uv + vec2(0.0, -u_texelSize));
+  float top    = samplePressure(uv + vec2(0.0,  u_texelSize));
 
   vec2 gradient = vec2(right - left, top - bottom) * 0.5;
   return texture(u_velocity, uv).xy - gradient;
 }
 
 void main() {
-  fragColor = vec4(subtractPressureGradient(v_uv), 0.0, 1.0);
+  bool onLeft   = v_uv.x < u_texelSize;
+  bool onRight  = v_uv.x > 1.0 - u_texelSize;
+  bool onBottom = v_uv.y < u_texelSize;
+  bool onTop    = v_uv.y > 1.0 - u_texelSize;
+  bool onBoundary = onLeft || onRight || onBottom || onTop;
+
+  if (u_boundary == 1 && onBoundary) {
+    // Absorb: zero velocity so fluid exits cleanly.
+    fragColor = vec4(0.0, 0.0, 0.0, 1.0);
+    return;
+  }
+
+  vec2 vel = subtractPressureGradient(v_uv);
+
+  if (u_boundary == 2 && onBoundary) {
+    // Reflect: negate the normal component at each wall.
+    if (onLeft || onRight)  vel.x = -vel.x;
+    if (onBottom || onTop)  vel.y = -vel.y;
+  }
+
+  fragColor = vec4(vel, 0.0, 1.0);
 }

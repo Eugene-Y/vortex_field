@@ -32,6 +32,7 @@ export const PHYSICS_DEFAULTS = {
   diffusionIterations:  20,
   pressureIterations:   40,
   simulationSpeed:      _float('simSpeed',     DEFAULTS.simSpeed),
+  boundaryMode:         _int('boundary', 0, 0, 2), // 0=wrap 1=absorb 2=reflect
 };
 
 export const MOUSE_DEFAULTS = {
@@ -71,6 +72,7 @@ export function buildShareUrl() {
     brushStrength: MOUSE_DEFAULTS.impulseStrength.toPrecision(3),
     patternScale:  MOUSE_DEFAULTS.patternScale.toPrecision(3),
     pairRange:     ROTATION_FIELD.pairRange.toPrecision(3),
+    boundary:      PHYSICS_DEFAULTS.boundaryMode,
     velBrightness: BRIGHTNESS_SLIDER_POSITIONS.velocity,
     rotBrightness: BRIGHTNESS_SLIDER_POSITIONS.rotation,
   });

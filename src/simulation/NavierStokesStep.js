@@ -1,7 +1,7 @@
 'use strict';
 
 import { ShaderProgram } from '../gl/ShaderProgram.js';
-import { PingPongFramebuffer, SingleFramebuffer, WRAPPING_REPEAT } from '../gl/Framebuffer.js';
+import { PingPongFramebuffer, SingleFramebuffer } from '../gl/Framebuffer.js';
 import { GRID_SIZE, PHYSICS_DEFAULTS } from '../config/SimulationConfig.js';
 
 const TEXEL_SIZE = 1.0 / GRID_SIZE;
@@ -20,15 +20,15 @@ export class NavierStokesStep {
     this._gl = gl;
     // Read directly from PHYSICS_DEFAULTS each frame so UI sliders take effect immediately.
 
-    // Periodic (REPEAT) boundaries: fluid wraps around edges, no artificial walls.
+    // Boundary mode is handled in shaders; textures always use CLAMP_TO_EDGE.
     this._velocity = new PingPongFramebuffer(
-      gl, GRID_SIZE, GRID_SIZE, gl.RG32F, gl.RG, gl.FLOAT, WRAPPING_REPEAT
+      gl, GRID_SIZE, GRID_SIZE, gl.RG32F, gl.RG, gl.FLOAT
     );
     this._pressure = new PingPongFramebuffer(
-      gl, GRID_SIZE, GRID_SIZE, gl.R32F, gl.RED, gl.FLOAT, WRAPPING_REPEAT
+      gl, GRID_SIZE, GRID_SIZE, gl.R32F, gl.RED, gl.FLOAT
     );
     this._divergence = new SingleFramebuffer(
-      gl, GRID_SIZE, GRID_SIZE, gl.R32F, gl.RED, gl.FLOAT, WRAPPING_REPEAT
+      gl, GRID_SIZE, GRID_SIZE, gl.R32F, gl.RED, gl.FLOAT
     );
 
     this._advectProgram        = new ShaderProgram(gl, shaderSources.vert, shaderSources.advect);
@@ -62,6 +62,8 @@ export class NavierStokesStep {
     this._injectImpulseProgram.setUniform2f('u_impulseDirection', direction[0], direction[1]);
     this._injectImpulseProgram.setUniform1f('u_impulseRadius', radius / GRID_SIZE);
     this._injectImpulseProgram.setUniform1f('u_impulseStrength', strength);
+    this._injectImpulseProgram.setUniform1i('u_boundary', PHYSICS_DEFAULTS.boundaryMode);
+    this._injectImpulseProgram.setUniform1f('u_gridSize', GRID_SIZE);
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this._velocity.readTexture);
@@ -125,6 +127,7 @@ export class NavierStokesStep {
     this._advectProgram.setUniform1f('u_deltaTime', deltaTime);
     this._advectProgram.setUniform1f('u_gridSize', GRID_SIZE);
     this._advectProgram.setUniform1f('u_damping', PHYSICS_DEFAULTS.damping);
+    this._advectProgram.setUniform1i('u_boundary', PHYSICS_DEFAULTS.boundaryMode);
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this._velocity.readTexture);
@@ -149,6 +152,7 @@ export class NavierStokesStep {
       this._diffuseProgram.setUniform1f('u_alpha', alpha);
       this._diffuseProgram.setUniform1f('u_beta', beta);
       this._diffuseProgram.setUniform1f('u_texelSize', TEXEL_SIZE);
+      this._diffuseProgram.setUniform1i('u_boundary', PHYSICS_DEFAULTS.boundaryMode);
 
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, this._velocity.readTexture);
@@ -175,6 +179,7 @@ export class NavierStokesStep {
     this._divergenceProgram.bind();
     this._divergenceProgram.setUniform1i('u_velocity', 0);
     this._divergenceProgram.setUniform1f('u_texelSize', TEXEL_SIZE);
+    this._divergenceProgram.setUniform1i('u_boundary', PHYSICS_DEFAULTS.boundaryMode);
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this._velocity.readTexture);
@@ -193,6 +198,7 @@ export class NavierStokesStep {
       this._pressureProgram.setUniform1i('u_pressure', 0);
       this._pressureProgram.setUniform1i('u_divergence', 1);
       this._pressureProgram.setUniform1f('u_texelSize', TEXEL_SIZE);
+      this._pressureProgram.setUniform1i('u_boundary', PHYSICS_DEFAULTS.boundaryMode);
 
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, this._pressure.readTexture);
@@ -214,6 +220,7 @@ export class NavierStokesStep {
     this._subtractGradProgram.setUniform1i('u_velocity', 0);
     this._subtractGradProgram.setUniform1i('u_pressure', 1);
     this._subtractGradProgram.setUniform1f('u_texelSize', TEXEL_SIZE);
+    this._subtractGradProgram.setUniform1i('u_boundary', PHYSICS_DEFAULTS.boundaryMode);
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this._velocity.readTexture);

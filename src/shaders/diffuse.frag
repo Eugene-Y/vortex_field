@@ -6,16 +6,24 @@ out vec4 fragColor;
 
 uniform sampler2D u_velocity;
 uniform sampler2D u_velocityPrev;
-uniform float u_alpha;   // (cellSize^2) / (viscosity * deltaTime)
-uniform float u_beta;    // 1.0 / (4.0 + alpha)
-uniform float u_texelSize; // 1.0 / gridSize
+uniform float u_alpha;
+uniform float u_beta;
+uniform float u_texelSize;
+uniform int u_boundary;
 
-// One Jacobi iteration for viscous diffusion.
+vec2 sampleVelocity(vec2 uv) {
+  if (u_boundary == 0) return texture(u_velocity, fract(uv)).xy;
+  // Absorb: outside = 0 (fluid has left). Reflect: clamp (Neumann).
+  if (u_boundary == 1 &&
+      (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)) return vec2(0.0);
+  return texture(u_velocity, clamp(uv, 0.0, 1.0)).xy;
+}
+
 vec2 jacobiDiffuseStep(vec2 uv) {
-  vec2 left   = texture(u_velocity, uv + vec2(-u_texelSize, 0.0)).xy;
-  vec2 right  = texture(u_velocity, uv + vec2( u_texelSize, 0.0)).xy;
-  vec2 bottom = texture(u_velocity, uv + vec2(0.0, -u_texelSize)).xy;
-  vec2 top    = texture(u_velocity, uv + vec2(0.0,  u_texelSize)).xy;
+  vec2 left   = sampleVelocity(uv + vec2(-u_texelSize, 0.0));
+  vec2 right  = sampleVelocity(uv + vec2( u_texelSize, 0.0));
+  vec2 bottom = sampleVelocity(uv + vec2(0.0, -u_texelSize));
+  vec2 top    = sampleVelocity(uv + vec2(0.0,  u_texelSize));
   vec2 center = texture(u_velocityPrev, uv).xy;
 
   return (left + right + bottom + top + u_alpha * center) * u_beta;

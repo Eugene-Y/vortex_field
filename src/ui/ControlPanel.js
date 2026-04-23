@@ -31,6 +31,14 @@ export class ControlPanel {
   }
 
   _buildPhysicsSliders(container) {
+    this._addSelect(container, 'Boundary', [
+      { value: 0, label: 'Wrap' },
+      { value: 1, label: 'Absorb' },
+      { value: 2, label: 'Reflect' },
+    ],
+      () => PHYSICS_DEFAULTS.boundaryMode,
+      v  => { PHYSICS_DEFAULTS.boundaryMode = v; }
+    );
     this._addLogSlider(container, 'Brush radius',   0.5,    20,
       () => MOUSE_DEFAULTS.impulseRadius,
       v  => { MOUSE_DEFAULTS.impulseRadius = v; }
@@ -107,6 +115,31 @@ export class ControlPanel {
         setValue(Math.exp(logMin + (logMax - logMin) * sliderValue / 100));
       },
     });
+  }
+
+  _addSelect(container, label, options, getValue, setValue) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'control-row';
+
+    const labelEl = document.createElement('span');
+    labelEl.className = 'control-label';
+    labelEl.textContent = label;
+
+    const select = document.createElement('select');
+    select.className = 'pattern-select';
+    const current = getValue();
+    for (const { value, label: text } of options) {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = text;
+      if (value === current) option.selected = true;
+      select.appendChild(option);
+    }
+    select.addEventListener('input', () => setValue(parseInt(select.value, 10)));
+
+    wrapper.appendChild(labelEl);
+    wrapper.appendChild(select);
+    container.appendChild(wrapper);
   }
 
   _addSlider({ container, label, initialSliderValue, formatValue, onChange }) {
