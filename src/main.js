@@ -9,6 +9,10 @@ import { ControlPanel }     from './ui/ControlPanel.js';
 import { PatternInjector }  from './interaction/PatternInjector.js';
 import { GRID_SIZE, DISPLAY_SCALE, DISPLAY_GAP } from './config/SimulationConfig.js';
 
+// Consecutive injection points are spaced this fraction of the brush radius apart.
+// Must match the constant in PatternInjector.js.
+const INJECTION_STEP_FRACTION = 0.75;
+
 const CANVAS_FIELD_SIZE = computeFieldPixelSize();
 
 function computeFieldPixelSize() {
@@ -97,14 +101,18 @@ function createFullScreenQuadVao(gl) {
 }
 
 function injectCircularImpulse(fluidField, quadVao) {
-  const STEPS        = 32;
   const CENTER_UV    = [0.5, 0.5];
   const RADIUS_UV    = 0.28;
   const STRENGTH     = 120;
   const BRUSH_RADIUS = 2.5;
 
-  for (let step = 0; step < STEPS; step++) {
-    const angle = (step / STEPS) * 2 * Math.PI;
+  // Scale step count with grid size so Gaussian blobs overlap at any resolution.
+  const circumferenceUv = 2 * Math.PI * RADIUS_UV;
+  const stepSizeUv      = (BRUSH_RADIUS * INJECTION_STEP_FRACTION) / GRID_SIZE;
+  const steps           = Math.max(32, Math.ceil(circumferenceUv / stepSizeUv));
+
+  for (let step = 0; step < steps; step++) {
+    const angle     = (step / steps) * 2 * Math.PI;
     const position  = [
       CENTER_UV[0] + RADIUS_UV * Math.cos(angle),
       CENTER_UV[1] + RADIUS_UV * Math.sin(angle),

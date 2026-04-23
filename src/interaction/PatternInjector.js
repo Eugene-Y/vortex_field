@@ -1,24 +1,29 @@
 'use strict';
 
-import { MOUSE_DEFAULTS } from '../config/SimulationConfig.js';
+import { MOUSE_DEFAULTS, GRID_SIZE } from '../config/SimulationConfig.js';
 
-const PATTERN_RADIUS = 0.28;  // half-extent of shape patterns in UV [0,1] space
+// Half-extent of shape patterns in UV [0,1] space.
+const PATTERN_RADIUS = 0.28;
+
+// Consecutive injection points are spaced this fraction of the brush radius apart.
+// At 0.75 each Gaussian blob significantly overlaps its neighbours — no visible gaps.
+const INJECTION_STEP_FRACTION = 0.75;
 
 const PATTERNS = [
-  { value: 'circle',    label: 'Circle'               },
-  { value: 'triangle',  label: 'Triangle'             },
-  { value: 'square',    label: 'Square'               },
-  { value: 'pentagon',  label: 'Pentagon'             },
-  { value: 'hexagon',   label: 'Hexagon'              },
-  { value: 'heptagon',  label: 'Heptagon'             },
-  { value: 'octagon',   label: 'Octagon'              },
-  { value: 'nonagon',   label: 'Nonagon'              },
-  { value: 'decagon',   label: 'Decagon'              },
-  { value: 'stripes',   label: 'Parallel stripes'     },
-  { value: 'gridlines', label: 'Square grid lines'    },
-  { value: 'trilines',  label: 'Triangular grid lines'},
-  { value: 'points',    label: 'Scattered points'     },
-  { value: 'noise',     label: 'Random noise'         },
+  { value: 'circle',    label: 'Circle'                },
+  { value: 'triangle',  label: 'Triangle'              },
+  { value: 'square',    label: 'Square'                },
+  { value: 'pentagon',  label: 'Pentagon'              },
+  { value: 'hexagon',   label: 'Hexagon'               },
+  { value: 'heptagon',  label: 'Heptagon'              },
+  { value: 'octagon',   label: 'Octagon'               },
+  { value: 'nonagon',   label: 'Nonagon'               },
+  { value: 'decagon',   label: 'Decagon'               },
+  { value: 'stripes',   label: 'Parallel stripes'      },
+  { value: 'gridlines', label: 'Square grid lines'     },
+  { value: 'trilines',  label: 'Triangular grid lines' },
+  { value: 'points',    label: 'Scattered points'      },
+  { value: 'noise',     label: 'Random noise'          },
 ];
 
 const POLYGON_SIDES = {
@@ -32,6 +37,14 @@ const POLYGON_SIDES = {
   nonagon:  9,
   decagon:  10,
 };
+
+// Returns the number of injection points needed to cover a UV-space path of the
+// given length with no gaps, given a brush radius expressed in grid cells.
+// The step size equals INJECTION_STEP_FRACTION × radius so consecutive Gaussians overlap.
+function stepsForUvLength(uvLength, radiusInCells) {
+  const stepSizeInUv = (radiusInCells * INJECTION_STEP_FRACTION) / GRID_SIZE;
+  return Math.max(2, Math.ceil(uvLength / stepSizeInUv));
+}
 
 export class PatternInjector {
   constructor(canvas, fluidField, fieldSize, displayGap, dropdownContainer) {
@@ -127,128 +140,153 @@ export class PatternInjector {
     if (action === 'points')    this._injectScatteredPoints(center, quadVao);
   }
 
-  // Injects 32 points along a regular polygon's perimeter with CCW tangential velocity.
-  // sides=0 produces a circle.
+  // Dispatches to circle or regular polygon injection.
   _injectPolygon(center, sides, quadVao) {
-    const STEPS    = 32;
-    const isCircle = sides < 3;
     const radius   = MOUSE_DEFAULTS.impulseRadius;
     const strength = MOUSE_DEFAULTS.impulseStrength;
 
-    for (let step = 0; step < STEPS; step++) {
-      const t = step / STEPS;
-      let position, direction;
-
-      if (isCircle) {
-        const angle = t * 2 * Math.PI;
-        position  = [
-          center[0] + PATTERN_RADIUS * Math.cos(angle),
-          center[1] + PATTERN_RADIUS * Math.sin(angle),
-        ];
-        direction = [-Math.sin(angle), Math.cos(angle)];
-      } else {
-        // Distribute t uniformly across N sides; regular polygon so arc-length is uniform too.
-        const sideIndex = Math.floor(t * sides);
-        const sideT     = t * sides - sideIndex;
-        const angleA    = (sideIndex / sides)       * 2 * Math.PI - Math.PI / 2;
-        const angleB    = ((sideIndex + 1) / sides) * 2 * Math.PI - Math.PI / 2;
-        const vA = [
-          center[0] + PATTERN_RADIUS * Math.cos(angleA),
-          center[1] + PATTERN_RADIUS * Math.sin(angleA),
-        ];
-        const vB = [
-          center[0] + PATTERN_RADIUS * Math.cos(angleB),
-          center[1] + PATTERN_RADIUS * Math.sin(angleB),
-        ];
-        position = [
-          vA[0] + sideT * (vB[0] - vA[0]),
-          vA[1] + sideT * (vB[1] - vA[1]),
-        ];
-        const sideLen = Math.hypot(vB[0] - vA[0], vB[1] - vA[1]);
-        direction = [(vB[0] - vA[0]) / sideLen, (vB[1] - vA[1]) / sideLen];
-      }
-
-      this._fluidField.injectImpulse(position, direction, radius, strength, quadVao);
+    if (sides < 3) {
+      this._injectCircle(center, PATTERN_RADIUS, radius, strength, quadVao);
+    } else {
+      this._injectRegularPolygon(center, sides, PATTERN_RADIUS, radius, strength, quadVao);
     }
   }
 
-  // Five horizontal stripes with alternating left/right flow — seeds Kelvin-Helmholtz shear.
+  // Samples the circumference with a step count derived from GRID_SIZE and brush radius
+  // so that every grid cell on the ring receives the impulse regardless of grid resolution.
+  _injectCircle(center, radiusUv, brushRadius, strength, quadVao) {
+    const circumferenceUv = 2 * Math.PI * radiusUv;
+    const steps = stepsForUvLength(circumferenceUv, brushRadius);
+
+    for (let step = 0; step < steps; step++) {
+      const angle     = (step / steps) * 2 * Math.PI;
+      const position  = [
+        center[0] + radiusUv * Math.cos(angle),
+        center[1] + radiusUv * Math.sin(angle),
+      ];
+      const direction = [-Math.sin(angle), Math.cos(angle)]; // CCW tangent
+      this._fluidField.injectImpulse(position, direction, brushRadius, strength, quadVao);
+    }
+  }
+
+  // Injects each side of a regular polygon independently.
+  // Step count per side is derived from the side's UV-space length so coverage is uniform.
+  // The last point of each side is omitted to avoid double-injection at vertices.
+  _injectRegularPolygon(center, sides, radiusUv, brushRadius, strength, quadVao) {
+    for (let sideIndex = 0; sideIndex < sides; sideIndex++) {
+      const angleA  = (sideIndex / sides)       * 2 * Math.PI - Math.PI / 2;
+      const angleB  = ((sideIndex + 1) / sides) * 2 * Math.PI - Math.PI / 2;
+
+      const vertexA = [
+        center[0] + radiusUv * Math.cos(angleA),
+        center[1] + radiusUv * Math.sin(angleA),
+      ];
+      const vertexB = [
+        center[0] + radiusUv * Math.cos(angleB),
+        center[1] + radiusUv * Math.sin(angleB),
+      ];
+
+      const sideVec      = [vertexB[0] - vertexA[0], vertexB[1] - vertexA[1]];
+      const sideLengthUv = Math.hypot(sideVec[0], sideVec[1]);
+      const direction    = [sideVec[0] / sideLengthUv, sideVec[1] / sideLengthUv];
+      const stepsForSide = stepsForUvLength(sideLengthUv, brushRadius);
+
+      for (let step = 0; step < stepsForSide; step++) {
+        const t        = step / stepsForSide; // exclude endpoint → handled by next side
+        const position = [
+          vertexA[0] + t * sideVec[0],
+          vertexA[1] + t * sideVec[1],
+        ];
+        this._fluidField.injectImpulse(position, direction, brushRadius, strength, quadVao);
+      }
+    }
+  }
+
+  // Five horizontal stripes with alternating ←→ flow — seeds Kelvin-Helmholtz shear instability.
   _injectStripes(center, quadVao) {
-    const STRIPE_COUNT      = 5;
-    const POINTS_PER_STRIPE = 8;
-    const HALF_WIDTH        = PATTERN_RADIUS * 1.1;
-    const HALF_HEIGHT       = PATTERN_RADIUS;
-    const radius            = MOUSE_DEFAULTS.impulseRadius;
-    const strength          = MOUSE_DEFAULTS.impulseStrength;
+    const STRIPE_COUNT = 5;
+    const HALF_WIDTH   = PATTERN_RADIUS * 1.1;
+    const HALF_HEIGHT  = PATTERN_RADIUS;
+    const radius       = MOUSE_DEFAULTS.impulseRadius;
+    const strength     = MOUSE_DEFAULTS.impulseStrength;
+
+    const pointsPerStripe = stepsForUvLength(2 * HALF_WIDTH, radius);
 
     for (let row = 0; row < STRIPE_COUNT; row++) {
       const v         = center[1] + HALF_HEIGHT * (row / (STRIPE_COUNT - 1) * 2 - 1);
       const direction = row % 2 === 0 ? [1, 0] : [-1, 0];
-      for (let col = 0; col < POINTS_PER_STRIPE; col++) {
-        const u = center[0] + HALF_WIDTH * (col / (POINTS_PER_STRIPE - 1) * 2 - 1);
+
+      for (let col = 0; col < pointsPerStripe; col++) {
+        const t = col / (pointsPerStripe - 1); // [0, 1] inclusive
+        const u = center[0] + HALF_WIDTH * (t * 2 - 1);
         this._fluidField.injectImpulse([u, v], direction, radius, strength, quadVao);
       }
     }
   }
 
-  // 5 horizontal + 5 vertical lines of 7 points each, alternating flow direction per line.
+  // 5 horizontal + 5 vertical lines, alternating flow direction per line.
   // Crossing orthogonal flows create vortices at every junction.
   _injectSquareGridLines(center, quadVao) {
-    const LINE_COUNT      = 5;
-    const POINTS_PER_LINE = 7;
-    const HALF_SPAN       = PATTERN_RADIUS;
-    const radius          = MOUSE_DEFAULTS.impulseRadius;
-    const strength        = MOUSE_DEFAULTS.impulseStrength;
+    const LINE_COUNT  = 5;
+    const HALF_SPAN   = PATTERN_RADIUS;
+    const radius      = MOUSE_DEFAULTS.impulseRadius;
+    const strength    = MOUSE_DEFAULTS.impulseStrength;
+
+    const pointsPerLine = stepsForUvLength(2 * HALF_SPAN, radius);
 
     for (let k = 0; k < LINE_COUNT; k++) {
       const offset = HALF_SPAN * (k / (LINE_COUNT - 1) * 2 - 1);
 
       // Horizontal line at y = center_y + offset
-      const hDir = k % 2 === 0 ? [1, 0] : [-1, 0];
-      for (let p = 0; p < POINTS_PER_LINE; p++) {
-        const t = HALF_SPAN * (p / (POINTS_PER_LINE - 1) * 2 - 1);
-        this._fluidField.injectImpulse([center[0] + t, center[1] + offset], hDir, radius, strength, quadVao);
+      const hDirection = k % 2 === 0 ? [1, 0] : [-1, 0];
+      for (let p = 0; p < pointsPerLine; p++) {
+        const t = p / (pointsPerLine - 1);
+        const x = center[0] + HALF_SPAN * (t * 2 - 1);
+        this._fluidField.injectImpulse([x, center[1] + offset], hDirection, radius, strength, quadVao);
       }
 
       // Vertical line at x = center_x + offset
-      const vDir = k % 2 === 0 ? [0, 1] : [0, -1];
-      for (let p = 0; p < POINTS_PER_LINE; p++) {
-        const t = HALF_SPAN * (p / (POINTS_PER_LINE - 1) * 2 - 1);
-        this._fluidField.injectImpulse([center[0] + offset, center[1] + t], vDir, radius, strength, quadVao);
+      const vDirection = k % 2 === 0 ? [0, 1] : [0, -1];
+      for (let p = 0; p < pointsPerLine; p++) {
+        const t = p / (pointsPerLine - 1);
+        const y = center[1] + HALF_SPAN * (t * 2 - 1);
+        this._fluidField.injectImpulse([center[0] + offset, y], vDirection, radius, strength, quadVao);
       }
     }
   }
 
-  // Three families of 5 parallel lines at 0°, 60°, 120°, each flowing along its line direction.
-  // Creates a triangular lattice with hexagonal interference structure.
+  // Three families of 5 parallel lines at 0°/60°/120°, each flowing along its line direction.
+  // Creates hexagonal interference structure.
   _injectTriangularGridLines(center, quadVao) {
-    const LINE_COUNT      = 5;
-    const POINTS_PER_LINE = 7;
-    const HALF_SPAN       = PATTERN_RADIUS * 1.1;
-    const HALF_RANGE      = PATTERN_RADIUS;
-    const radius          = MOUSE_DEFAULTS.impulseRadius;
-    const strength        = MOUSE_DEFAULTS.impulseStrength;
+    const LINE_COUNT  = 5;
+    const HALF_SPAN   = PATTERN_RADIUS * 1.1;
+    const HALF_RANGE  = PATTERN_RADIUS;
+    const radius      = MOUSE_DEFAULTS.impulseRadius;
+    const strength    = MOUSE_DEFAULTS.impulseStrength;
 
-    const familyAngles = [0, Math.PI / 3, 2 * Math.PI / 3];
+    const pointsPerLine = stepsForUvLength(2 * HALF_SPAN, radius);
+    const familyAngles  = [0, Math.PI / 3, 2 * Math.PI / 3];
 
     for (const angle of familyAngles) {
-      const dir    = [Math.cos(angle), Math.sin(angle)];
-      const normal = [-Math.sin(angle), Math.cos(angle)];
+      const direction = [Math.cos(angle), Math.sin(angle)];
+      const normal    = [-Math.sin(angle), Math.cos(angle)];
 
       for (let k = 0; k < LINE_COUNT; k++) {
         const offset = HALF_RANGE * (k / (LINE_COUNT - 1) * 2 - 1);
 
-        for (let p = 0; p < POINTS_PER_LINE; p++) {
-          const t = HALF_SPAN * (p / (POINTS_PER_LINE - 1) * 2 - 1);
-          const u = center[0] + t * dir[0] + offset * normal[0];
-          const v = center[1] + t * dir[1] + offset * normal[1];
-          this._fluidField.injectImpulse([u, v], dir, radius, strength, quadVao);
+        for (let p = 0; p < pointsPerLine; p++) {
+          const t = p / (pointsPerLine - 1);
+          const s = HALF_SPAN * (t * 2 - 1);
+          const u = center[0] + s * direction[0] + offset * normal[0];
+          const v = center[1] + s * direction[1] + offset * normal[1];
+          this._fluidField.injectImpulse([u, v], direction, radius, strength, quadVao);
         }
       }
     }
   }
 
   // Hexagonally packed points (center + ring of 6 + ring of 12), each pointing radially outward.
+  // These are discrete source points so step count does not apply.
   _injectScatteredPoints(center, quadVao) {
     const INNER_COUNT  = 6;
     const INNER_RADIUS = PATTERN_RADIUS * 0.5;
