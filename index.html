@@ -52,6 +52,38 @@
       justify-content: space-around;
       margin-top: 8px;
     }
+
+    #field-controls {
+      display: flex;
+      /* gap and child widths set by JS to match canvas layout */
+      margin-top: 16px;
+    }
+
+    .control-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 6px;
+    }
+
+    .control-label {
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .control-row input[type=range] {
+      flex: 1;
+      accent-color: #888;
+    }
+
+    .control-value {
+      font-size: 10px;
+      width: 36px;
+      text-align: right;
+      flex-shrink: 0;
+    }
   </style>
 </head>
 <body>
@@ -61,6 +93,10 @@
       <div id="labels">
         <span class="field-label">Field A — Velocity</span>
         <span class="field-label">Field B — Rotation Centers</span>
+      </div>
+      <div id="field-controls">
+        <div id="controls-velocity"></div>
+        <div id="controls-rotation"></div>
       </div>
     </div>
   </div>

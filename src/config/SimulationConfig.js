@@ -25,9 +25,8 @@ export const ROTATION_FIELD = {
 };
 
 export const RENDER_DEFAULTS = {
-  // Reinhard tone-mapping midpoint: rotation value that maps to 50% brightness.
-  // Increase if field is too bright, decrease if too dark.
-  rotationToneMidpoint: 0.3,
+  velocityToneMidpoint: 30.0,  // velocity magnitude that maps to 50% brightness
+  rotationToneMidpoint: 0.3,   // rotation ω that maps to 50% brightness
 };
 
 export const COLORS = {

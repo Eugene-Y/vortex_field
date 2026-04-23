@@ -5,6 +5,7 @@ import { FluidField }       from './simulation/FluidField.js';
 import { RotationField }    from './simulation/RotationField.js';
 import { FieldRenderer }    from './rendering/FieldRenderer.js';
 import { MouseInjector }    from './interaction/MouseInjector.js';
+import { ControlPanel }     from './ui/ControlPanel.js';
 import { GRID_SIZE, DISPLAY_SCALE, DISPLAY_GAP } from './config/SimulationConfig.js';
 
 const CANVAS_FIELD_SIZE = GRID_SIZE * DISPLAY_SCALE;
@@ -94,6 +95,12 @@ async function main() {
   const renderer      = new FieldRenderer(gl, shaders.render.vert, shaders.render.frag);
   const quadVao       = createFullScreenQuadVao(gl);
   const mouseInjector = new MouseInjector(canvas, fluidField, CANVAS_FIELD_SIZE);
+  new ControlPanel(
+    document.getElementById('controls-velocity'),
+    document.getElementById('controls-rotation'),
+    CANVAS_FIELD_SIZE,
+    DISPLAY_GAP,
+  );
 
   let previousTime = performance.now();
 

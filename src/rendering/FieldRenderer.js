@@ -32,6 +32,7 @@ export class FieldRenderer {
     this._program.setUniform1i('u_mode', mode);
     this._program.setUniform3f('u_colorPositive', ...COLORS.rotationPositive);
     this._program.setUniform3f('u_colorNegative', ...COLORS.rotationNegative);
+    this._program.setUniform1f('u_velocityToneMidpoint', RENDER_DEFAULTS.velocityToneMidpoint);
     this._program.setUniform1f('u_rotationToneMidpoint', RENDER_DEFAULTS.rotationToneMidpoint);
 
     gl.activeTexture(gl.TEXTURE0);
