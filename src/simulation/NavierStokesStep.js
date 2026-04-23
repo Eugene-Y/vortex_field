@@ -18,7 +18,7 @@ const TEXEL_SIZE = 1.0 / GRID_SIZE;
 export class NavierStokesStep {
   constructor(gl, shaderSources) {
     this._gl = gl;
-    this._params = { ...PHYSICS_DEFAULTS };
+    // Read directly from PHYSICS_DEFAULTS each frame so UI sliders take effect immediately.
 
     // Periodic (REPEAT) boundaries: fluid wraps around edges, no artificial walls.
     this._velocity = new PingPongFramebuffer(
@@ -94,7 +94,7 @@ export class NavierStokesStep {
     this._advectProgram.setUniform1i('u_velocity', 0);
     this._advectProgram.setUniform1f('u_deltaTime', deltaTime);
     this._advectProgram.setUniform1f('u_gridSize', GRID_SIZE);
-    this._advectProgram.setUniform1f('u_damping', this._params.damping);
+    this._advectProgram.setUniform1f('u_damping', PHYSICS_DEFAULTS.damping);
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this._velocity.readTexture);
@@ -105,11 +105,11 @@ export class NavierStokesStep {
 
   _diffuse(deltaTime, quadVao) {
     const gl = this._gl;
-    const alpha = (TEXEL_SIZE * TEXEL_SIZE) / (this._params.viscosity * deltaTime);
+    const alpha = (TEXEL_SIZE * TEXEL_SIZE) / (PHYSICS_DEFAULTS.viscosity * deltaTime);
     const beta = 1.0 / (4.0 + alpha);
     const prevTexture = this._velocity.readTexture;
 
-    for (let iteration = 0; iteration < this._params.diffusionIterations; iteration++) {
+    for (let iteration = 0; iteration < PHYSICS_DEFAULTS.diffusionIterations; iteration++) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, this._velocity.writeFramebuffer);
       gl.viewport(0, 0, GRID_SIZE, GRID_SIZE);
 
@@ -155,7 +155,7 @@ export class NavierStokesStep {
   _solvePressure(quadVao) {
     const gl = this._gl;
 
-    for (let iteration = 0; iteration < this._params.pressureIterations; iteration++) {
+    for (let iteration = 0; iteration < PHYSICS_DEFAULTS.pressureIterations; iteration++) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, this._pressure.writeFramebuffer);
       gl.viewport(0, 0, GRID_SIZE, GRID_SIZE);
 

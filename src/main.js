@@ -8,7 +8,16 @@ import { MouseInjector }    from './interaction/MouseInjector.js';
 import { ControlPanel }     from './ui/ControlPanel.js';
 import { GRID_SIZE, DISPLAY_SCALE, DISPLAY_GAP } from './config/SimulationConfig.js';
 
-const CANVAS_FIELD_SIZE = GRID_SIZE * DISPLAY_SCALE;
+const CANVAS_FIELD_SIZE = computeFieldPixelSize();
+
+function computeFieldPixelSize() {
+  const reservedVertical   = 180; // labels + sliders + margins
+  const reservedHorizontal = 48;
+  const maxFromWidth  = Math.floor((window.innerWidth  - reservedHorizontal - DISPLAY_GAP) / 2 / GRID_SIZE);
+  const maxFromHeight = Math.floor((window.innerHeight - reservedVertical) / GRID_SIZE);
+  const scale = Math.max(1, Math.min(DISPLAY_SCALE, maxFromWidth, maxFromHeight));
+  return GRID_SIZE * scale;
+}
 
 async function loadShaderSource(path) {
   const response = await fetch(path);
@@ -95,9 +104,11 @@ async function main() {
   const renderer      = new FieldRenderer(gl, shaders.render.vert, shaders.render.frag);
   const quadVao       = createFullScreenQuadVao(gl);
   const mouseInjector = new MouseInjector(canvas, fluidField, CANVAS_FIELD_SIZE);
+  const velocityControls = document.getElementById('controls-velocity');
   new ControlPanel(
-    document.getElementById('controls-velocity'),
+    velocityControls,
     document.getElementById('controls-rotation'),
+    velocityControls,
     CANVAS_FIELD_SIZE,
     DISPLAY_GAP,
   );

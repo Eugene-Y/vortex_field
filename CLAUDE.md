@@ -2,12 +2,12 @@
 
 ## Concept
 
-Two coupled WebGL fields on a 64×64 grid.
+Two coupled WebGL fields on a 50×50 grid (configurable via `GRID_SIZE`).
 
 **Field A — Velocity field.**
 A 2D fluid simulation (Navier-Stokes) on a grid. The user interacts with the mouse,
 injecting impulses into the field. Energy propagates, diffuses, and decays according
-to configurable parameters (viscosity, damping).
+to configurable parameters (damping, brush radius, brush strength).
 
 **Field B — Instantaneous rotation field.**
 Reset to zero every frame. For every pair of cells (i, j) in Field A, compute the
@@ -17,39 +17,55 @@ whose grid coordinate corresponds to that center of rotation. Sign encodes direc
 (clockwise vs counter-clockwise). Magnitude encodes strength.
 
 This is NOT a local neighborhood approximation. All N² pairs are computed.
-Field size is 64×64 = 4096 cells → ~8 million pairs per frame. This is acceptable.
+Field size is 50×50 = 2500 cells → ~3 million pairs per frame. This is acceptable.
 
 For pairs whose velocity vectors are parallel (pure translation, no rotation):
 the contribution is discarded — pure translation has no instantaneous center.
 
+**ω formula:** `ω = (arm × vA) / |arm|²`
+where `arm` is the vector from cell j to cell i, and `vA` is the velocity at cell i.
+Dividing by `|arm|²` normalizes out distance — every pair contributes true angular
+velocity regardless of how far apart the cells are.
+
 ## Architecture
 
 Single `index.html` entry point. JavaScript split across well-named module files.
-WebGL for all field computation and rendering.
+WebGL2 for all field computation and rendering. No build step — native ES modules.
 
 ```
 index.html
 src/
-  main.js                  — bootstrap, event wiring
+  main.js                  — bootstrap, canvas sizing, render loop
+  config/
+    SimulationConfig.js    — all named constants; single source of truth
   simulation/
-    FluidField.js          — Field A: Navier-Stokes state and step
-    RotationField.js       — Field B: per-frame rotation accumulation
-    NavierStokesStep.js    — pure physics step (advection, diffusion, pressure)
-    PairRotationKernel.js  — computes instantaneous centers for all pairs
+    FluidField.js          — Field A: wraps physics step, exposes velocityTexture
+    RotationField.js       — Field B: per-frame rotation accumulation via GPU kernel
+    NavierStokesStep.js    — physics step (advection, diffusion, pressure projection)
+    PairRotationKernel.js  — draws GRID_SIZE⁴ points, one per pair, additive blending
   rendering/
-    FieldRenderer.js       — draws either field to screen
-    ColorMap.js            — maps scalar/vector values to color
+    FieldRenderer.js       — renders either field to the appropriate viewport
   interaction/
     MouseInjector.js       — translates mouse events into field impulses
+  ui/
+    ControlPanel.js        — all DOM slider creation and wiring
   gl/
-    GlContext.js           — WebGL context setup and management
-    Framebuffer.js         — ping-pong framebuffer abstraction
-    ShaderProgram.js       — shader compilation and uniform management
+    GlContext.js           — WebGL2 context setup; requires EXT_color_buffer_float
+                             and EXT_float_blend (critical — see below)
+    Framebuffer.js         — PingPongFramebuffer and SingleFramebuffer abstractions
+    ShaderProgram.js       — shader compilation, uniform cache, bind/set methods
   shaders/
-    navier_stokes.frag
-    rotation_accumulate.frag
-    render.frag
-    common.vert
+    common.vert            — full-screen quad vertex shader (shared)
+    advect.frag
+    diffuse.frag
+    divergence.frag
+    pressure.frag
+    subtract_gradient.frag
+    inject_impulse.frag
+    rotation_accumulate.vert  — per-pair vertex shader: computes center, clips to grid
+    rotation_accumulate.frag  — outputs ω contribution for additive blending
+    render.frag               — Reinhard tonemapping for both fields; HSV for velocity,
+                                orange/blue for rotation
 ```
 
 ## Code Quality Rules — Non-Negotiable
@@ -83,6 +99,9 @@ excuse sloppy code. The following rules apply without exception.
 
 **State**
 - No shared mutable globals. State lives in class instances passed explicitly.
+- Exception: `PHYSICS_DEFAULTS` and `MOUSE_DEFAULTS` in `SimulationConfig.js` are
+  intentionally mutable — the UI writes to them and the physics step reads them live
+  each frame, so slider changes take effect immediately without any extra wiring.
 
 ## Layout
 
@@ -94,34 +113,45 @@ Both fields are always visible simultaneously, side by side:
 
 No toggle, no split-view switch. Both render every frame.
 
-**Field A** — velocity magnitude visualized as brightness (or hue-mapped).
+Single canvas, single GL context. The canvas width is `CANVAS_FIELD_SIZE * 2 + DISPLAY_GAP`.
+Two viewports are set per frame — one for each field. `DISPLAY_GAP` (px) separates them.
+
+`CANVAS_FIELD_SIZE` is computed dynamically from `window.innerWidth` and `window.innerHeight`
+so both fields always fit on screen at the largest integer scale that fits.
+
+**Field A** — velocity magnitude mapped to brightness via HSV (hue = direction, value = speed).
+Brightness uses Reinhard tonemapping: `x / (x + c)` where `c = velocityToneMidpoint`.
 
 **Field B — color encoding:**
 - Pure black = zero (no rotation contribution)
 - Orange = positive (counter-clockwise rotation)
 - Blue = negative (clockwise rotation)
-- Brightness encodes magnitude
+- Brightness encodes magnitude via Reinhard tonemapping with `rotationToneMidpoint`
 
-The color mapping lives in `ColorMap.js` as a named function `mapRotationToColor()`.
-The orange and blue hues are named constants, not inline hex values.
+Color constants (`rotationPositive`, `rotationNegative`, `rotationZero`) live in
+`SimulationConfig.js` as named exports, not inline hex values.
 
 ## Parameters — All Named, None Hardcoded
 
 Every tuneable value lives in `src/config/SimulationConfig.js` as a named export.
-No magic numbers anywhere else in the codebase. Example structure:
+No magic numbers anywhere else in the codebase. Current structure:
 
 ```js
-export const GRID_SIZE = 64;
+export const GRID_SIZE = 50;
+
+export const DISPLAY_SCALE = 8;  // pixels per grid cell (max; clamped to fit screen)
+export const DISPLAY_GAP = 32;   // pixel gap between the two fields
 
 export const PHYSICS_DEFAULTS = {
-  viscosity: 0.1,
-  damping: 0.995,
+  viscosity: 0.001,          // explicit viscosity (NOTE: see Known Limitations)
+  damping: 0.995,            // per-frame velocity retention (1 = no loss)
   diffusionIterations: 20,
+  pressureIterations: 40,
 };
 
 export const MOUSE_DEFAULTS = {
-  impulseRadius: 5,
-  impulseStrength: 200,
+  impulseRadius: 2.0,        // brush radius in grid cells
+  impulseStrength: 100.0,
 };
 
 export const ROTATION_FIELD = {
@@ -129,19 +159,56 @@ export const ROTATION_FIELD = {
   accumulationScale: 1.0,
 };
 
+export const RENDER_DEFAULTS = {
+  velocityToneMidpoint: 30.0,   // velocity magnitude that maps to 50% brightness
+  rotationToneMidpoint: 0.3,    // rotation ω that maps to 50% brightness
+};
+
 export const COLORS = {
-  rotationPositive: [1.0, 0.5, 0.0],  // orange
-  rotationNegative: [0.0, 0.6, 1.0],  // blue
-  rotationZero:     [0.0, 0.0, 0.0],  // black
+  rotationPositive: [1.0, 0.5, 0.0],  // orange — counter-clockwise
+  rotationNegative: [0.0, 0.6, 1.0],  // blue   — clockwise
+  rotationZero:     [0.0, 0.0, 0.0],  // black  — no contribution
 };
 ```
+
+## UI Controls
+
+`ControlPanel.js` builds all sliders from DOM. All sliders are log-scaled (100 integer steps,
+linear in log space between min and max). The center position corresponds to the default value
+at construction time.
+
+Current sliders:
+- **Brightness** (under each field) — adjusts `velocityToneMidpoint` / `rotationToneMidpoint`
+- **Brush radius** — adjusts `MOUSE_DEFAULTS.impulseRadius` (range 0.5–20)
+- **Brush strength** — adjusts `MOUSE_DEFAULTS.impulseStrength` (range 5–500)
+- **Damping loss** — adjusts `PHYSICS_DEFAULTS.damping` via the transform
+  `loss = 1 - damping` (range 0.0005–0.2), displayed in loss space for clean log scale
+
+Physics sliders appear below Field A. Brightness sliders appear below their respective field.
+
+## WebGL Requirements
+
+`GlContext.js` requires two extensions at startup (throws if unavailable):
+- `EXT_color_buffer_float` — needed to render into R32F/RG32F framebuffers
+- `EXT_float_blend` — needed for additive blending into float framebuffers (Field B)
+
+Without `EXT_float_blend`, additive blending into a float texture is undefined behavior:
+each draw call would overwrite rather than accumulate, so Field B would show only one
+random pair per pixel instead of the correct sum over all pairs.
+
+Physics framebuffers use `TEXTURE_WRAP_S/T = REPEAT` (periodic boundary conditions).
+This avoids wall accumulation artifacts that appear with `CLAMP_TO_EDGE`.
 
 ## Extensibility Requirements
 
 The code must be written so the following changes require minimal surgery:
 
 **Adding a new physics model** (e.g. wave equation, reaction-diffusion):
-- Implement a new class with the same interface as `NavierStokesStep.js`
+- Implement a new class with the same interface as `NavierStokesStep.js`:
+  - `step(deltaTime, quadVao)`
+  - `injectImpulse(position, direction, radius, strength, quadVao)`
+  - `get velocityTexture`
+  - `dispose()`
 - Register it in `PhysicsRegistry.js`
 - The rest of the system does not change
 
@@ -149,18 +216,26 @@ The code must be written so the following changes require minimal surgery:
 - Change `GRID_SIZE` in `SimulationConfig.js`
 - Nothing else changes
 
-**Adding UI controls** (sliders for viscosity, damping, etc.):
+**Adding UI controls:**
 - `SimulationConfig.js` values are the single source of truth
 - UI reads from and writes to config only, never touches simulation internals directly
-- A `ControlPanel.js` module handles all DOM interaction
+- Add sliders via `ControlPanel._addLogSlider()` or `ControlPanel._addSlider()`
 
 **Adding a new color map:**
-- Add a named function to `ColorMap.js`
+- Add a named function to a `ColorMap.js` module
 - Pass it as a parameter to `FieldRenderer`
 
-## Non-goals for v1
+## Known Limitations
 
-- No UI framework. Plain HTML controls are fine.
+**Viscosity slider was removed.** The semi-Lagrangian advection scheme introduces numerical
+diffusion of approximately `h²/(2·dt)` ≈ 0.013 (at `GRID_SIZE=50`, `dt≈0.016`). Any explicit
+viscosity value below this threshold has no visible effect — the numerical diffusion dominates.
+A viscosity slider is therefore misleading and was removed. If viscosity control becomes
+important, it would require switching to a scheme with lower numerical diffusion (e.g. BFECC
+or MacCormack advection).
+
+## Non-goals
+
+- No UI framework. Plain HTML controls.
 - No build step. Native ES modules (`type="module"`).
 - No TypeScript (but code should read as if it were typed).
-- No sliders yet — but the architecture must make adding them trivial.

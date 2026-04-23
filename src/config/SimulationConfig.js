@@ -1,12 +1,12 @@
 'use strict';
 
-export const GRID_SIZE = 50;
+export const GRID_SIZE = 80;
 
 export const DISPLAY_SCALE = 8; // pixels per grid cell
 export const DISPLAY_GAP = 32; // pixel gap between the two fields
 
 export const PHYSICS_DEFAULTS = {
-  viscosity: 0.1,
+  viscosity: 0.001,
   damping: 0.995,
   diffusionIterations: 20,
   pressureIterations: 40,

@@ -1,27 +1,76 @@
 'use strict';
 
-import { RENDER_DEFAULTS } from '../config/SimulationConfig.js';
+import { RENDER_DEFAULTS, PHYSICS_DEFAULTS, MOUSE_DEFAULTS } from '../config/SimulationConfig.js';
 
-const LOG_RANGE = 3; // slider covers ±e^3 ≈ 20x around the default value
+const BRIGHTNESS_LOG_RANGE = 3; // ±e^3 ≈ 20x around default
 
-/**
- * Builds brightness sliders for Field A and Field B.
- * Each slider is logarithmically mapped: center = current default value,
- * left = 20x darker, right = 20x brighter.
- */
 export class ControlPanel {
-  constructor(velocityContainer, rotationContainer, fieldSize, gapSize) {
+  constructor(velocityContainer, rotationContainer, physicsContainer, fieldSize, gapSize) {
     velocityContainer.style.width = `${fieldSize}px`;
     rotationContainer.style.width = `${fieldSize}px`;
     velocityContainer.parentElement.style.gap = `${gapSize}px`;
 
     this._addBrightnessSlider(velocityContainer, 'Brightness', RENDER_DEFAULTS, 'velocityToneMidpoint');
     this._addBrightnessSlider(rotationContainer, 'Brightness', RENDER_DEFAULTS, 'rotationToneMidpoint');
+
+    this._buildPhysicsSliders(physicsContainer);
+  }
+
+  _buildPhysicsSliders(container) {
+    this._addLogSlider(container, 'Brush radius',   0.5,    20,
+      () => MOUSE_DEFAULTS.impulseRadius,
+      v  => { MOUSE_DEFAULTS.impulseRadius = v; }
+    );
+    this._addLogSlider(container, 'Brush strength', 5,      500,
+      () => MOUSE_DEFAULTS.impulseStrength,
+      v  => { MOUSE_DEFAULTS.impulseStrength = v; }
+    );
+    // Damping slider works in "loss per frame" space (1 - damping) for a clean log scale.
+    // Loss 0.0005 ≈ damping 0.9995 (very slow decay) to 0.2 ≈ damping 0.8 (fast decay).
+    this._addLogSlider(container, 'Damping loss',   0.0005, 0.2,
+      () => 1 - PHYSICS_DEFAULTS.damping,
+      v  => { PHYSICS_DEFAULTS.damping = 1 - v; }
+    );
   }
 
   _addBrightnessSlider(container, label, config, key) {
     const defaultMidpoint = config[key];
+    this._addSlider({
+      container,
+      label,
+      initialSliderValue: 50,
+      formatValue: null,
+      onChange: sliderValue => {
+        config[key] = defaultMidpoint * Math.exp(BRIGHTNESS_LOG_RANGE * (50 - sliderValue) / 50);
+      },
+    });
+  }
 
+  // Log-scaled slider. getValue/setValue work in the natural value space (what gets stored).
+  // Slider center always corresponds to the current default value at construction time.
+  _addLogSlider(container, label, min, max, getValue, setValue) {
+    const logMin = Math.log(min);
+    const logMax = Math.log(max);
+    const defaultValue = getValue();
+    const initialSliderValue = Math.round(
+      (Math.log(defaultValue) - logMin) / (logMax - logMin) * 100
+    );
+
+    this._addSlider({
+      container,
+      label,
+      initialSliderValue: Math.max(0, Math.min(100, initialSliderValue)),
+      formatValue: sliderValue => {
+        const v = Math.exp(logMin + (logMax - logMin) * sliderValue / 100);
+        return v < 0.01 ? v.toExponential(1) : v.toPrecision(3);
+      },
+      onChange: sliderValue => {
+        setValue(Math.exp(logMin + (logMax - logMin) * sliderValue / 100));
+      },
+    });
+  }
+
+  _addSlider({ container, label, initialSliderValue, formatValue, onChange }) {
     const wrapper = document.createElement('div');
     wrapper.className = 'control-row';
 
@@ -34,21 +83,21 @@ export class ControlPanel {
     slider.min = 0;
     slider.max = 100;
     slider.step = 1;
-    slider.value = 50; // center = default value
+    slider.value = initialSliderValue;
+
+    const valueEl = document.createElement('span');
+    valueEl.className = 'control-value';
+    valueEl.textContent = formatValue ? formatValue(initialSliderValue) : '';
 
     slider.addEventListener('input', () => {
-      // Higher slider → smaller midpoint → brighter.
-      config[key] = midpointFromSlider(parseFloat(slider.value), defaultMidpoint);
+      const v = parseFloat(slider.value);
+      onChange(v);
+      if (formatValue) valueEl.textContent = formatValue(v);
     });
 
     wrapper.appendChild(labelEl);
     wrapper.appendChild(slider);
+    if (formatValue) wrapper.appendChild(valueEl);
     container.appendChild(wrapper);
   }
-}
-
-function midpointFromSlider(sliderValue, defaultMidpoint) {
-  // sliderValue: 0 (dark) → 100 (bright), center 50 = default.
-  // midpoint is inverse of brightness, so we negate the exponent.
-  return defaultMidpoint * Math.exp(LOG_RANGE * (50 - sliderValue) / 50);
 }
