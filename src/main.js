@@ -114,6 +114,8 @@ async function main() {
   );
 
   let previousTime = performance.now();
+  let animationFrameId = null;
+  let paused = false;
 
   function renderFrame(currentTime) {
     const deltaTime = Math.min((currentTime - previousTime) / 1000, 0.05);
@@ -136,10 +138,26 @@ async function main() {
     gl.viewport(CANVAS_FIELD_SIZE + DISPLAY_GAP, 0, CANVAS_FIELD_SIZE, CANVAS_FIELD_SIZE);
     renderer.renderRotationField(rotationField.rotationTexture, quadVao);
 
-    requestAnimationFrame(renderFrame);
+    animationFrameId = requestAnimationFrame(renderFrame);
   }
 
-  requestAnimationFrame(renderFrame);
+  function togglePause() {
+    paused = !paused;
+    const button = document.getElementById('pause-button');
+    if (paused) {
+      cancelAnimationFrame(animationFrameId);
+      animationFrameId = null;
+      button.textContent = 'Play';
+    } else {
+      previousTime = performance.now();
+      button.textContent = 'Pause';
+      animationFrameId = requestAnimationFrame(renderFrame);
+    }
+  }
+
+  document.getElementById('pause-button').addEventListener('click', togglePause);
+
+  animationFrameId = requestAnimationFrame(renderFrame);
 }
 
 main().catch(error => {

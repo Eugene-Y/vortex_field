@@ -91,9 +91,45 @@
       text-align: right;
       flex-shrink: 0;
     }
+
+    #top-bar {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 16px;
+    }
+
+    #pause-button {
+      background: none;
+      border: 1px solid #555;
+      color: #888;
+      font-family: monospace;
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 4px 16px;
+      cursor: pointer;
+    }
+
+    #pause-button:hover {
+      border-color: #888;
+      color: #bbb;
+    }
+
+    #description {
+      margin-top: 28px;
+      max-width: 720px;
+      font-size: 10px;
+      line-height: 1.7;
+      letter-spacing: 0.03em;
+      color: #555;
+      text-align: center;
+    }
   </style>
 </head>
 <body>
+  <div id="top-bar">
+    <button id="pause-button">Pause</button>
+  </div>
   <div id="fields">
     <div id="canvas-container">
       <canvas id="canvas-main"></canvas>
@@ -106,6 +142,13 @@
         <div id="controls-rotation"></div>
       </div>
     </div>
+  </div>
+
+  <div id="description">
+    <strong style="color:#777">Field A</strong> — 2D fluid (Navier-Stokes): velocity magnitude as brightness, hue encodes direction.
+    &nbsp;&nbsp;<strong style="color:#777">Field B</strong> — instantaneous rotation centers: for every pair of cells the center of
+    rotation is computed and its angular velocity accumulated. Orange = counter-clockwise, blue = clockwise.
+    Drag to inject impulses.
   </div>
 
   <script type="module" src="src/main.js"></script>
