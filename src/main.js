@@ -7,7 +7,7 @@ import { FieldRenderer }    from './rendering/FieldRenderer.js';
 import { MouseInjector }    from './interaction/MouseInjector.js';
 import { ControlPanel }     from './ui/ControlPanel.js';
 import { PatternInjector }  from './interaction/PatternInjector.js';
-import { GRID_SIZE, DISPLAY_SCALE, DISPLAY_GAP, MOUSE_DEFAULTS } from './config/SimulationConfig.js';
+import { GRID_SIZE, DISPLAY_SCALE, DISPLAY_GAP, MOUSE_DEFAULTS, PHYSICS_DEFAULTS } from './config/SimulationConfig.js';
 
 // Consecutive injection points are spaced this fraction of the brush radius apart.
 // Must match the constant in PatternInjector.js.
@@ -159,7 +159,8 @@ async function main() {
   let paused = false;
 
   function renderFrame(currentTime) {
-    const deltaTime = Math.min((currentTime - previousTime) / 1000, 0.05);
+    const baseDeltaTime = Math.min((currentTime - previousTime) / 1000, 0.05);
+    const deltaTime = baseDeltaTime * PHYSICS_DEFAULTS.simulationSpeed;
     previousTime = currentTime;
 
     mouseInjector.applyPendingInjection(quadVao);

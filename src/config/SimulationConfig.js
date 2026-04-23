@@ -10,6 +10,7 @@ export const PHYSICS_DEFAULTS = {
   damping: 0.995,
   diffusionIterations: 20,
   pressureIterations: 40,
+  simulationSpeed: 1.0,
 };
 
 export const MOUSE_DEFAULTS = {

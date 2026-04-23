@@ -36,6 +36,10 @@ export class ControlPanel {
       () => MOUSE_DEFAULTS.impulseStrength,
       v  => { MOUSE_DEFAULTS.impulseStrength = v; }
     );
+    this._addLogSlider(container, 'Sim speed',      0.1,    10.0,
+      () => PHYSICS_DEFAULTS.simulationSpeed,
+      v  => { PHYSICS_DEFAULTS.simulationSpeed = v; }
+    );
     // Damping slider works in "loss per frame" space (1 - damping) for a clean log scale.
     // Loss 0.0005 ≈ damping 0.9995 (very slow decay) to 0.2 ≈ damping 0.8 (fast decay).
     this._addLogSlider(container, 'Damping loss',   0.0005, 0.2,
