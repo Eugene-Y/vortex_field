@@ -1,40 +1,71 @@
 'use strict';
 
-const _gridSizeParam = new URLSearchParams(window.location.search).get('gridSize');
-export const GRID_SIZE = _gridSizeParam ? Math.max(32, Math.min(512, parseInt(_gridSizeParam, 10))) : 64;
+const _p = new URLSearchParams(window.location.search);
+const _float = (key, def) => { const v = parseFloat(_p.get(key)); return isFinite(v) ? v : def; };
+const _int   = (key, def, min, max) => { const v = parseInt(_p.get(key), 10); return isNaN(v) ? def : Math.max(min, Math.min(max, v)); };
+
+// All tuneable defaults live here. URL params override them on load.
+const DEFAULTS = {
+  gridSize:      64,
+  damping:       0.995,
+  simSpeed:      1.0,
+  brushRadius:   2.0,
+  brushStrength: 100.0,
+  patternScale:  0.5,
+  pairRange:     1.0,
+  velBrightness: 30.0,
+  rotBrightness: 0.3,
+};
+
+export const GRID_SIZE = _int('gridSize', DEFAULTS.gridSize, 32, 512);
 
 export const DISPLAY_SCALE = 8; // pixels per grid cell
 export const DISPLAY_GAP = 32; // pixel gap between the two fields
 
 export const PHYSICS_DEFAULTS = {
-  viscosity: 0.001,
-  damping: 0.995,
-  diffusionIterations: 20,
-  pressureIterations: 40,
-  simulationSpeed: 1.0,
+  viscosity:            0.001,
+  damping:              _float('damping',      DEFAULTS.damping),
+  diffusionIterations:  20,
+  pressureIterations:   40,
+  simulationSpeed:      _float('simSpeed',     DEFAULTS.simSpeed),
 };
 
 export const MOUSE_DEFAULTS = {
-  impulseRadius: 2.0,
-  impulseStrength: 100.0,
-  patternScale: 0.5, // normalized scale [0, 1], where 1.0 means diameter = grid size
+  impulseRadius:   _float('brushRadius',   DEFAULTS.brushRadius),
+  impulseStrength: _float('brushStrength', DEFAULTS.brushStrength),
+  patternScale:    _float('patternScale',  DEFAULTS.patternScale),
 };
 
 export const ROTATION_FIELD = {
-  // Below this cross-product magnitude the pair has no meaningful rotation center.
-  // Numerically: |v_i × v_j| / (|v_i| * |v_j|) < threshold → discard.
   parallelThreshold: 0.001,
   accumulationScale: 1.0,
-  // Normalized interaction range [0, 1]. For each pair (A, B), B is included only
-  // if its periodic distance from A is ≤ pairRange * gridSize / 2 (diameter = pairRange * gridSize).
-  // At 1.0 all pairs within the inscribed circle contribute; at 0 none do.
-  pairRange: 1.0,
+  pairRange:         _float('pairRange', DEFAULTS.pairRange),
 };
 
 export const RENDER_DEFAULTS = {
-  velocityToneMidpoint: 30.0,  // velocity magnitude that maps to 50% brightness
-  rotationToneMidpoint: 0.3,   // rotation ω that maps to 50% brightness
+  velocityToneMidpoint: _float('velBrightness', DEFAULTS.velBrightness),
+  rotationToneMidpoint: _float('rotBrightness', DEFAULTS.rotBrightness),
 };
+
+export const RENDER_BRIGHTNESS_DEFAULTS = {
+  velocityToneMidpoint: DEFAULTS.velBrightness,
+  rotationToneMidpoint: DEFAULTS.rotBrightness,
+};
+
+export function buildShareUrl() {
+  const params = new URLSearchParams({
+    gridSize:      GRID_SIZE,
+    damping:       PHYSICS_DEFAULTS.damping.toPrecision(4),
+    simSpeed:      PHYSICS_DEFAULTS.simulationSpeed.toPrecision(3),
+    brushRadius:   MOUSE_DEFAULTS.impulseRadius.toPrecision(3),
+    brushStrength: MOUSE_DEFAULTS.impulseStrength.toPrecision(3),
+    patternScale:  MOUSE_DEFAULTS.patternScale.toPrecision(3),
+    pairRange:     ROTATION_FIELD.pairRange.toPrecision(3),
+    velBrightness: RENDER_DEFAULTS.velocityToneMidpoint.toPrecision(3),
+    rotBrightness: RENDER_DEFAULTS.rotationToneMidpoint.toPrecision(3),
+  });
+  return `${window.location.origin}${window.location.pathname}?${params}`;
+}
 
 export const COLORS = {
   rotationPositive: [1.0, 0.5, 0.0], // orange — counter-clockwise

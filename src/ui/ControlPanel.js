@@ -1,6 +1,6 @@
 'use strict';
 
-import { RENDER_DEFAULTS, PHYSICS_DEFAULTS, MOUSE_DEFAULTS, ROTATION_FIELD } from '../config/SimulationConfig.js';
+import { RENDER_DEFAULTS, RENDER_BRIGHTNESS_DEFAULTS, PHYSICS_DEFAULTS, MOUSE_DEFAULTS, ROTATION_FIELD } from '../config/SimulationConfig.js';
 
 const BRIGHTNESS_LOG_RANGE = 3; // ±e^3 ≈ 20x around default
 
@@ -10,8 +10,8 @@ export class ControlPanel {
     rotationContainer.style.width = `${fieldSize}px`;
     velocityContainer.parentElement.style.gap = `${gapSize}px`;
 
-    this._addBrightnessSlider(velocityContainer, 'Brightness', RENDER_DEFAULTS, 'velocityToneMidpoint');
-    this._addBrightnessSlider(rotationContainer, 'Brightness', RENDER_DEFAULTS, 'rotationToneMidpoint');
+    this._addBrightnessSlider(velocityContainer, 'Brightness', RENDER_DEFAULTS, 'velocityToneMidpoint', RENDER_BRIGHTNESS_DEFAULTS.velocityToneMidpoint);
+    this._addBrightnessSlider(rotationContainer, 'Brightness', RENDER_DEFAULTS, 'rotationToneMidpoint', RENDER_BRIGHTNESS_DEFAULTS.rotationToneMidpoint);
 
     this._buildPhysicsSliders(physicsContainer);
   }
@@ -48,15 +48,19 @@ export class ControlPanel {
     );
   }
 
-  _addBrightnessSlider(container, label, config, key) {
-    const defaultMidpoint = config[key];
+  _addBrightnessSlider(container, label, config, key, originalDefault) {
+    // originalDefault is the hardcoded center (slider pos 50).
+    // Invert the formula to place the slider at the URL-loaded current value.
+    const initialSliderValue = Math.round(
+      50 - 50 / BRIGHTNESS_LOG_RANGE * Math.log(config[key] / originalDefault)
+    );
     this._addSlider({
       container,
       label,
-      initialSliderValue: 50,
+      initialSliderValue: Math.max(0, Math.min(100, initialSliderValue)),
       formatValue: null,
       onChange: sliderValue => {
-        config[key] = defaultMidpoint * Math.exp(BRIGHTNESS_LOG_RANGE * (50 - sliderValue) / 50);
+        config[key] = originalDefault * Math.exp(BRIGHTNESS_LOG_RANGE * (50 - sliderValue) / 50);
       },
     });
   }
