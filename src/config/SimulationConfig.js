@@ -15,6 +15,7 @@ export const PHYSICS_DEFAULTS = {
 export const MOUSE_DEFAULTS = {
   impulseRadius: 2.0,
   impulseStrength: 100.0,
+  patternScale: 0.5, // normalized scale [0, 1], where 1.0 means diameter = grid size
 };
 
 export const ROTATION_FIELD = {

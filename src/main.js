@@ -7,7 +7,7 @@ import { FieldRenderer }    from './rendering/FieldRenderer.js';
 import { MouseInjector }    from './interaction/MouseInjector.js';
 import { ControlPanel }     from './ui/ControlPanel.js';
 import { PatternInjector }  from './interaction/PatternInjector.js';
-import { GRID_SIZE, DISPLAY_SCALE, DISPLAY_GAP } from './config/SimulationConfig.js';
+import { GRID_SIZE, DISPLAY_SCALE, DISPLAY_GAP, MOUSE_DEFAULTS } from './config/SimulationConfig.js';
 
 // Consecutive injection points are spaced this fraction of the brush radius apart.
 // Must match the constant in PatternInjector.js.
@@ -102,7 +102,7 @@ function createFullScreenQuadVao(gl) {
 
 function injectCircularImpulse(fluidField, quadVao) {
   const CENTER_UV    = [0.5, 0.5];
-  const RADIUS_UV    = 0.28;
+  const RADIUS_UV    = MOUSE_DEFAULTS.patternScale * 0.5;
   const STRENGTH     = 120;
   const BRUSH_RADIUS = 2.5;
 
@@ -133,19 +133,24 @@ async function main() {
   const rotationField = new RotationField(gl, shaders.rotation.vert, shaders.rotation.frag);
   const renderer      = new FieldRenderer(gl, shaders.render.vert, shaders.render.frag);
   const quadVao       = createFullScreenQuadVao(gl);
-  const mouseInjector   = new MouseInjector(canvas, fluidField, CANVAS_FIELD_SIZE);
-  const patternInjector = new PatternInjector(
-    canvas, fluidField, CANVAS_FIELD_SIZE, DISPLAY_GAP,
-    document.getElementById('controls-rotation'),
-  );
+  const mouseInjector    = new MouseInjector(canvas, fluidField, CANVAS_FIELD_SIZE);
   const velocityControls = document.getElementById('controls-velocity');
-  new ControlPanel(
+  const rotationControls = document.getElementById('controls-rotation');
+
+  const controlPanel = new ControlPanel(
     velocityControls,
-    document.getElementById('controls-rotation'),
+    rotationControls,
     velocityControls,
     CANVAS_FIELD_SIZE,
     DISPLAY_GAP,
   );
+
+  const patternInjector = new PatternInjector(
+    canvas, fluidField, CANVAS_FIELD_SIZE, DISPLAY_GAP,
+    rotationControls,
+  );
+
+  controlPanel.addRotationSliders(rotationControls);
 
   injectCircularImpulse(fluidField, quadVao);
 

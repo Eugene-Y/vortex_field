@@ -2,9 +2,6 @@
 
 import { MOUSE_DEFAULTS, GRID_SIZE } from '../config/SimulationConfig.js';
 
-// Half-extent of shape patterns in UV [0,1] space.
-const PATTERN_RADIUS = 0.28;
-
 // Consecutive injection points are spaced this fraction of the brush radius apart.
 // At 0.75 each Gaussian blob significantly overlaps its neighbours — no visible gaps.
 const INJECTION_STEP_FRACTION = 0.75;
@@ -144,11 +141,12 @@ export class PatternInjector {
   _injectPolygon(center, sides, quadVao) {
     const radius   = MOUSE_DEFAULTS.impulseRadius;
     const strength = MOUSE_DEFAULTS.impulseStrength;
+    const patternRadius = MOUSE_DEFAULTS.patternScale * 0.5;
 
     if (sides < 3) {
-      this._injectCircle(center, PATTERN_RADIUS, radius, strength, quadVao);
+      this._injectCircle(center, patternRadius, radius, strength, quadVao);
     } else {
-      this._injectRegularPolygon(center, sides, PATTERN_RADIUS, radius, strength, quadVao);
+      this._injectRegularPolygon(center, sides, patternRadius, radius, strength, quadVao);
     }
   }
 
@@ -204,11 +202,12 @@ export class PatternInjector {
 
   // Five horizontal stripes with alternating ←→ flow — seeds Kelvin-Helmholtz shear instability.
   _injectStripes(center, quadVao) {
-    const STRIPE_COUNT = 5;
-    const HALF_WIDTH   = PATTERN_RADIUS * 1.1;
-    const HALF_HEIGHT  = PATTERN_RADIUS;
-    const radius       = MOUSE_DEFAULTS.impulseRadius;
-    const strength     = MOUSE_DEFAULTS.impulseStrength;
+    const STRIPE_COUNT  = 5;
+    const patternRadius = MOUSE_DEFAULTS.patternScale * 0.5;
+    const HALF_WIDTH    = patternRadius * 1.1;
+    const HALF_HEIGHT   = patternRadius;
+    const radius        = MOUSE_DEFAULTS.impulseRadius;
+    const strength      = MOUSE_DEFAULTS.impulseStrength;
 
     const pointsPerStripe = stepsForUvLength(2 * HALF_WIDTH, radius);
 
@@ -227,10 +226,11 @@ export class PatternInjector {
   // 5 horizontal + 5 vertical lines, alternating flow direction per line.
   // Crossing orthogonal flows create vortices at every junction.
   _injectSquareGridLines(center, quadVao) {
-    const LINE_COUNT  = 5;
-    const HALF_SPAN   = PATTERN_RADIUS;
-    const radius      = MOUSE_DEFAULTS.impulseRadius;
-    const strength    = MOUSE_DEFAULTS.impulseStrength;
+    const LINE_COUNT    = 5;
+    const patternRadius = MOUSE_DEFAULTS.patternScale * 0.5;
+    const HALF_SPAN     = patternRadius;
+    const radius        = MOUSE_DEFAULTS.impulseRadius;
+    const strength      = MOUSE_DEFAULTS.impulseStrength;
 
     const pointsPerLine = stepsForUvLength(2 * HALF_SPAN, radius);
 
@@ -258,11 +258,12 @@ export class PatternInjector {
   // Three families of 5 parallel lines at 0°/60°/120°, each flowing along its line direction.
   // Creates hexagonal interference structure.
   _injectTriangularGridLines(center, quadVao) {
-    const LINE_COUNT  = 5;
-    const HALF_SPAN   = PATTERN_RADIUS * 1.1;
-    const HALF_RANGE  = PATTERN_RADIUS;
-    const radius      = MOUSE_DEFAULTS.impulseRadius;
-    const strength    = MOUSE_DEFAULTS.impulseStrength;
+    const LINE_COUNT    = 5;
+    const patternRadius = MOUSE_DEFAULTS.patternScale * 0.5;
+    const HALF_SPAN     = patternRadius * 1.1;
+    const HALF_RANGE    = patternRadius;
+    const radius        = MOUSE_DEFAULTS.impulseRadius;
+    const strength      = MOUSE_DEFAULTS.impulseStrength;
 
     const pointsPerLine = stepsForUvLength(2 * HALF_SPAN, radius);
     const familyAngles  = [0, Math.PI / 3, 2 * Math.PI / 3];
@@ -288,12 +289,13 @@ export class PatternInjector {
   // Hexagonally packed points (center + ring of 6 + ring of 12), each pointing radially outward.
   // These are discrete source points so step count does not apply.
   _injectScatteredPoints(center, quadVao) {
-    const INNER_COUNT  = 6;
-    const INNER_RADIUS = PATTERN_RADIUS * 0.5;
-    const OUTER_COUNT  = 12;
-    const OUTER_RADIUS = PATTERN_RADIUS;
-    const radius       = MOUSE_DEFAULTS.impulseRadius;
-    const strength     = MOUSE_DEFAULTS.impulseStrength;
+    const INNER_COUNT   = 6;
+    const patternRadius = MOUSE_DEFAULTS.patternScale * 0.5;
+    const INNER_RADIUS  = patternRadius * 0.5;
+    const OUTER_COUNT   = 12;
+    const OUTER_RADIUS  = patternRadius;
+    const radius        = MOUSE_DEFAULTS.impulseRadius;
+    const strength      = MOUSE_DEFAULTS.impulseStrength;
 
     this._fluidField.injectImpulse(center, [1, 0], radius * 1.5, strength, quadVao);
 

@@ -12,12 +12,19 @@ export class ControlPanel {
 
     this._addBrightnessSlider(velocityContainer, 'Brightness', RENDER_DEFAULTS, 'velocityToneMidpoint');
     this._addBrightnessSlider(rotationContainer, 'Brightness', RENDER_DEFAULTS, 'rotationToneMidpoint');
-    this._addLinearSlider(rotationContainer, 'Pair range', 0, 1,
+
+    this._buildPhysicsSliders(physicsContainer);
+  }
+
+  addRotationSliders(container) {
+    this._addLinearSlider(container, 'Pattern size', 0, 1,
+      () => MOUSE_DEFAULTS.patternScale,
+      v  => { MOUSE_DEFAULTS.patternScale = v; }
+    );
+    this._addLinearSlider(container, 'Pair range', 0, 1,
       () => ROTATION_FIELD.pairRange,
       v  => { ROTATION_FIELD.pairRange = v; }
     );
-
-    this._buildPhysicsSliders(physicsContainer);
   }
 
   _buildPhysicsSliders(container) {
