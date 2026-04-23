@@ -22,7 +22,7 @@ export class ControlPanel {
       () => MOUSE_DEFAULTS.patternScale,
       v  => { MOUSE_DEFAULTS.patternScale = v; }
     );
-    this._addLinearSlider(container, 'Pair range', 0, 1,
+    this._addLinearSlider(container, 'Pair range', -1, 1,
       () => ROTATION_FIELD.pairRange,
       v  => { ROTATION_FIELD.pairRange = v; }
     );

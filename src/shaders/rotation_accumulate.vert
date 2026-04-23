@@ -102,11 +102,25 @@ void main() {
   vec2 positionA = gridIndexToPosition(indexA);
   vec2 positionB = gridIndexToPosition(indexB);
 
-  // Discard pairs whose periodic distance exceeds the configured range.
-  // Diameter = pairRange * gridSize, so radius = pairRange * gridSize / 2.
-  float rangeRadius = u_pairRange * float(u_gridSize) * 0.5;
+  // Filter pairs by distance range.
+  // Positive pairRange: disc [0, pairRange * gridSize/2].
+  // Negative pairRange: annulus — both inner and outer radius vary with t=|pairRange|.
+  //   outer = sqrt(2) + (gridSize/2 - sqrt(2)) * t   (grows from √2 to gridSize/2)
+  //   inner = sqrt(2) * (1 - t)                       (shrinks from √2 to 0)
   vec2  pairDisplacement = periodicDisplacement(positionA, positionB);
-  if (dot(pairDisplacement, pairDisplacement) > rangeRadius * rangeRadius) {
+  float distSq = dot(pairDisplacement, pairDisplacement);
+  float gSize  = float(u_gridSize);
+  bool  discard_pair;
+  if (u_pairRange >= 0.0) {
+    float outerR = u_pairRange * gSize * 0.5;
+    discard_pair = distSq > outerR * outerR;
+  } else {
+    // Negative: annulus [inner, maxDist]. Near 0 → only far pairs; near -1 → all pairs.
+    float maxR   = gSize * 0.5;
+    float innerR = maxR * (1.0 + u_pairRange); // = maxR * (1 - |pairRange|)
+    discard_pair = distSq > maxR * maxR || distSq < innerR * innerR;
+  }
+  if (discard_pair) {
     gl_Position = vec4(2.0, 2.0, 0.0, 1.0);
     gl_PointSize = 0.0;
     v_rotationContribution = 0.0;
