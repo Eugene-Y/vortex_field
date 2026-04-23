@@ -34,7 +34,7 @@ export class ControlPanel {
       () => MOUSE_DEFAULTS.impulseRadius,
       v  => { MOUSE_DEFAULTS.impulseRadius = v; }
     );
-    this._addLogSlider(container, 'Brush strength', 5,      500,
+    this._addLogSlider(container, 'Brush strength', 1,      500,
       () => MOUSE_DEFAULTS.impulseStrength,
       v  => { MOUSE_DEFAULTS.impulseStrength = v; }
     );
