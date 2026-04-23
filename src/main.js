@@ -7,11 +7,7 @@ import { FieldRenderer }    from './rendering/FieldRenderer.js';
 import { MouseInjector }    from './interaction/MouseInjector.js';
 import { ControlPanel }     from './ui/ControlPanel.js';
 import { PatternInjector }  from './interaction/PatternInjector.js';
-import { GRID_SIZE, DISPLAY_SCALE, DISPLAY_GAP, MOUSE_DEFAULTS, PHYSICS_DEFAULTS, buildShareUrl } from './config/SimulationConfig.js';
-
-// Consecutive injection points are spaced this fraction of the brush radius apart.
-// Must match the constant in PatternInjector.js.
-const INJECTION_STEP_FRACTION = 0.75;
+import { GRID_SIZE, DISPLAY_SCALE, DISPLAY_GAP, PHYSICS_DEFAULTS, buildShareUrl } from './config/SimulationConfig.js';
 
 const CANVAS_FIELD_SIZE = computeFieldPixelSize();
 
@@ -100,27 +96,6 @@ function createFullScreenQuadVao(gl) {
   return vao;
 }
 
-function injectCircularImpulse(fluidField, quadVao) {
-  const CENTER_UV    = [0.5, 0.5];
-  const RADIUS_UV    = MOUSE_DEFAULTS.patternScale * 0.5;
-  const STRENGTH     = 120;
-  const BRUSH_RADIUS = 2.5;
-
-  // Scale step count with grid size so Gaussian blobs overlap at any resolution.
-  const circumferenceUv = 2 * Math.PI * RADIUS_UV;
-  const stepSizeUv      = (BRUSH_RADIUS * INJECTION_STEP_FRACTION) / GRID_SIZE;
-  const steps           = Math.max(32, Math.ceil(circumferenceUv / stepSizeUv));
-
-  for (let step = 0; step < steps; step++) {
-    const angle     = (step / steps) * 2 * Math.PI;
-    const position  = [
-      CENTER_UV[0] + RADIUS_UV * Math.cos(angle),
-      CENTER_UV[1] + RADIUS_UV * Math.sin(angle),
-    ];
-    const direction = [-Math.sin(angle), Math.cos(angle)]; // CCW tangent
-    fluidField.injectImpulse(position, direction, BRUSH_RADIUS, STRENGTH, quadVao);
-  }
-}
 
 async function main() {
   const canvas = document.getElementById('canvas-main');
@@ -152,7 +127,7 @@ async function main() {
 
   controlPanel.addRotationSliders(rotationControls);
 
-  injectCircularImpulse(fluidField, quadVao);
+  patternInjector.injectAt([0.5, 0.5], quadVao);
 
   let previousTime = performance.now();
   let animationFrameId = null;

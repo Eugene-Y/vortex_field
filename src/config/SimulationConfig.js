@@ -3,6 +3,7 @@
 const _p = new URLSearchParams(window.location.search);
 const _float = (key, def) => { const v = parseFloat(_p.get(key)); return isFinite(v) ? v : def; };
 const _int   = (key, def, min, max) => { const v = parseInt(_p.get(key), 10); return isNaN(v) ? def : Math.max(min, Math.min(max, v)); };
+const _str   = (key, def) => _p.has(key) ? _p.get(key) : def;
 
 // All tuneable defaults live here. URL params override them on load.
 const DEFAULTS = {
@@ -19,7 +20,8 @@ const DEFAULTS = {
 
 const VEL_TONE_BASE     = 30.0;
 const ROT_TONE_BASE     = 0.3;
-const BRIGHTNESS_LOG_RANGE = 3;
+export const VEL_LOG_RANGE = 3;
+export const ROT_LOG_RANGE = Math.log(ROT_TONE_BASE * Math.exp(3) * 20.0 / ROT_TONE_BASE); // ≈5.485
 
 export const GRID_SIZE = _int('gridSize', DEFAULTS.gridSize, 32, 512);
 
@@ -41,6 +43,10 @@ export const MOUSE_DEFAULTS = {
   patternScale:    _float('patternScale',  DEFAULTS.patternScale),
 };
 
+export const PATTERN_DEFAULTS = {
+  pattern: _str('pattern', 'circle'),
+};
+
 export const ROTATION_FIELD = {
   parallelThreshold: 0.001,
   accumulationScale: 1.0,
@@ -50,12 +56,12 @@ export const ROTATION_FIELD = {
 const velBrightnessPos = _int('velBrightness', DEFAULTS.velBrightness, 0, 100);
 const rotBrightnessPos = _int('rotBrightness', DEFAULTS.rotBrightness, 0, 100);
 
-const brightnessToTone = (base, pos) =>
-  base * Math.exp(BRIGHTNESS_LOG_RANGE * (50 - pos) / 50);
+const brightnessToTone = (base, logRange, pos) =>
+  base * Math.exp(logRange * (50 - pos) / 50);
 
 export const RENDER_DEFAULTS = {
-  velocityToneMidpoint: brightnessToTone(VEL_TONE_BASE, velBrightnessPos),
-  rotationToneMidpoint: brightnessToTone(ROT_TONE_BASE, rotBrightnessPos),
+  velocityToneMidpoint: brightnessToTone(VEL_TONE_BASE, VEL_LOG_RANGE, velBrightnessPos),
+  rotationToneMidpoint: brightnessToTone(ROT_TONE_BASE, ROT_LOG_RANGE, rotBrightnessPos),
 };
 
 export const BRIGHTNESS_SLIDER_POSITIONS = {
@@ -73,6 +79,7 @@ export function buildShareUrl() {
     patternScale:  MOUSE_DEFAULTS.patternScale.toPrecision(3),
     pairRange:     ROTATION_FIELD.pairRange.toPrecision(3),
     boundary:      PHYSICS_DEFAULTS.boundaryMode,
+    pattern:       PATTERN_DEFAULTS.pattern,
     velBrightness: BRIGHTNESS_SLIDER_POSITIONS.velocity,
     rotBrightness: BRIGHTNESS_SLIDER_POSITIONS.rotation,
   });

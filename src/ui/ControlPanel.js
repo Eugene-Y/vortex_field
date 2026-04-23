@@ -1,11 +1,9 @@
 'use strict';
 
-import { RENDER_DEFAULTS, BRIGHTNESS_SLIDER_POSITIONS, PHYSICS_DEFAULTS, MOUSE_DEFAULTS, ROTATION_FIELD } from '../config/SimulationConfig.js';
+import { RENDER_DEFAULTS, BRIGHTNESS_SLIDER_POSITIONS, PHYSICS_DEFAULTS, MOUSE_DEFAULTS, ROTATION_FIELD, VEL_LOG_RANGE, ROT_LOG_RANGE } from '../config/SimulationConfig.js';
 
-
-const VEL_TONE_BASE     = 30.0;
-const ROT_TONE_BASE     = 0.3;
-const BRIGHTNESS_LOG_RANGE = 3;
+const VEL_TONE_BASE = 30.0;
+const ROT_TONE_BASE = 0.3;
 
 export class ControlPanel {
   constructor(velocityContainer, rotationContainer, physicsContainer, fieldSize, gapSize) {
@@ -13,8 +11,8 @@ export class ControlPanel {
     rotationContainer.style.width = `${fieldSize}px`;
     velocityContainer.parentElement.style.gap = `${gapSize}px`;
 
-    this._addBrightnessSlider(velocityContainer, 'Brightness', RENDER_DEFAULTS, 'velocityToneMidpoint', VEL_TONE_BASE, BRIGHTNESS_SLIDER_POSITIONS.velocity, 'velocity');
-    this._addBrightnessSlider(rotationContainer, 'Brightness', RENDER_DEFAULTS, 'rotationToneMidpoint', ROT_TONE_BASE, BRIGHTNESS_SLIDER_POSITIONS.rotation, 'rotation');
+    this._addBrightnessSlider(velocityContainer, 'Brightness', RENDER_DEFAULTS, 'velocityToneMidpoint', VEL_TONE_BASE, VEL_LOG_RANGE, BRIGHTNESS_SLIDER_POSITIONS.velocity, 'velocity');
+    this._addBrightnessSlider(rotationContainer, 'Brightness', RENDER_DEFAULTS, 'rotationToneMidpoint', ROT_TONE_BASE, ROT_LOG_RANGE, BRIGHTNESS_SLIDER_POSITIONS.rotation, 'rotation');
 
     this._buildPhysicsSliders(physicsContainer);
   }
@@ -53,15 +51,15 @@ export class ControlPanel {
     );
     // Damping slider works in "loss per frame" space (1 - damping) for a clean log scale.
     // Loss 0.0005 ≈ damping 0.9995 (very slow decay) to 0.2 ≈ damping 0.8 (fast decay).
-    this._addLogSlider(container, 'Damping loss',   0.0005, 0.2,
+    this._addLogSlider(container, 'Damping loss',   0.000001, 0.2,
       () => 1 - PHYSICS_DEFAULTS.damping,
       v  => { PHYSICS_DEFAULTS.damping = 1 - v; }
     );
   }
 
-  _addBrightnessSlider(container, label, config, key, toneBase, initialSliderValue, positionKey) {
+  _addBrightnessSlider(container, label, config, key, toneBase, logRange, initialSliderValue, positionKey) {
     const applyPosition = sliderValue => {
-      config[key] = toneBase * Math.exp(BRIGHTNESS_LOG_RANGE * (50 - sliderValue) / 50);
+      config[key] = toneBase * Math.exp(logRange * (50 - sliderValue) / 50);
       BRIGHTNESS_SLIDER_POSITIONS[positionKey] = sliderValue;
     };
     applyPosition(initialSliderValue);

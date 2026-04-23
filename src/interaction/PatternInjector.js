@@ -1,6 +1,6 @@
 'use strict';
 
-import { MOUSE_DEFAULTS, GRID_SIZE } from '../config/SimulationConfig.js';
+import { MOUSE_DEFAULTS, GRID_SIZE, PATTERN_DEFAULTS } from '../config/SimulationConfig.js';
 
 // Consecutive injection points are spaced this fraction of the brush radius apart.
 // At 0.75 each Gaussian blob significantly overlaps its neighbours — no visible gaps.
@@ -59,6 +59,10 @@ export class PatternInjector {
     canvas.addEventListener('dblclick', this._onDblClick);
   }
 
+  injectAt(center, quadVao) {
+    this._execute(this._select.value, center, quadVao);
+  }
+
   applyPendingPattern(quadVao) {
     if (!this._pending) return;
     const { action, center } = this._pending;
@@ -84,9 +88,11 @@ export class PatternInjector {
       const option = document.createElement('option');
       option.value = value;
       option.textContent = text;
-      if (value === 'circle') option.selected = true;
       select.appendChild(option);
     }
+    select.value = PATTERN_DEFAULTS.pattern;
+
+    select.addEventListener('input', () => { PATTERN_DEFAULTS.pattern = select.value; });
 
     wrapper.appendChild(label);
     wrapper.appendChild(select);
