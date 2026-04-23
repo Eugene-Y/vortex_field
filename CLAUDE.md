@@ -186,6 +186,26 @@ Current sliders:
 
 Physics sliders appear below Field A. Brightness sliders appear below their respective field.
 
+**Pattern injection** (`PatternInjector.js` — double-click on Field B):
+A dropdown below Field B selects the injection pattern. Double-clicking anywhere on Field B
+injects it at the clicked grid position (same UV coordinates as Field A). Uses current brush
+radius and strength from the sliders. Adds to existing velocity, never resets it.
+
+Current patterns:
+- **Polygons** (circle, triangle, square, pentagon, hexagon, heptagon, octagon, nonagon,
+  decagon) — 32 points along the perimeter with CCW tangential velocity
+- **Parallel stripes** — 5 horizontal stripes × 8 points, alternating ←→ flow
+  (seeds Kelvin-Helmholtz shear instability)
+- **Square grid lines** — 5 horizontal + 5 vertical lines of 7 points each, orthogonal
+  flow directions (↔ and ↕), creates crossing jets and junction vortices
+- **Triangular grid lines** — 3 families of 5 parallel lines at 0°/60°/120°, each flowing
+  along its line direction, creates hexagonal interference
+- **Scattered points** — hexagonal packing (center + ring of 6 + ring of 12), each pointing
+  radially outward from the pattern center
+- **Random noise** — per-cell pseudo-random velocity added via `noise.frag` shader; uses
+  current brush strength. Uniform coverage, no position dependency.
+- **Reset** — clears both ping-pong velocity buffers to zero
+
 ## WebGL Requirements
 
 `GlContext.js` requires two extensions at startup (throws if unavailable):

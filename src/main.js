@@ -6,6 +6,7 @@ import { RotationField }    from './simulation/RotationField.js';
 import { FieldRenderer }    from './rendering/FieldRenderer.js';
 import { MouseInjector }    from './interaction/MouseInjector.js';
 import { ControlPanel }     from './ui/ControlPanel.js';
+import { PatternInjector }  from './interaction/PatternInjector.js';
 import { GRID_SIZE, DISPLAY_SCALE, DISPLAY_GAP } from './config/SimulationConfig.js';
 
 const CANVAS_FIELD_SIZE = computeFieldPixelSize();
@@ -34,6 +35,7 @@ async function loadAllShaders() {
     pressureFrag,
     subtractGradientFrag,
     injectImpulseFrag,
+    noiseFrag,
     rotationAccumulateVert,
     rotationAccumulateFrag,
     renderFrag,
@@ -45,6 +47,7 @@ async function loadAllShaders() {
     loadShaderSource('src/shaders/pressure.frag'),
     loadShaderSource('src/shaders/subtract_gradient.frag'),
     loadShaderSource('src/shaders/inject_impulse.frag'),
+    loadShaderSource('src/shaders/noise.frag'),
     loadShaderSource('src/shaders/rotation_accumulate.vert'),
     loadShaderSource('src/shaders/rotation_accumulate.frag'),
     loadShaderSource('src/shaders/render.frag'),
@@ -59,6 +62,7 @@ async function loadAllShaders() {
       pressure:         pressureFrag,
       subtractGradient: subtractGradientFrag,
       injectImpulse:    injectImpulseFrag,
+      noise:            noiseFrag,
     },
     rotation: {
       vert: rotationAccumulateVert,
@@ -92,6 +96,24 @@ function createFullScreenQuadVao(gl) {
   return vao;
 }
 
+function injectCircularImpulse(fluidField, quadVao) {
+  const STEPS        = 32;
+  const CENTER_UV    = [0.5, 0.5];
+  const RADIUS_UV    = 0.28;
+  const STRENGTH     = 120;
+  const BRUSH_RADIUS = 2.5;
+
+  for (let step = 0; step < STEPS; step++) {
+    const angle = (step / STEPS) * 2 * Math.PI;
+    const position  = [
+      CENTER_UV[0] + RADIUS_UV * Math.cos(angle),
+      CENTER_UV[1] + RADIUS_UV * Math.sin(angle),
+    ];
+    const direction = [-Math.sin(angle), Math.cos(angle)]; // CCW tangent
+    fluidField.injectImpulse(position, direction, BRUSH_RADIUS, STRENGTH, quadVao);
+  }
+}
+
 async function main() {
   const canvas = document.getElementById('canvas-main');
   configureCanvas(canvas);
@@ -103,7 +125,11 @@ async function main() {
   const rotationField = new RotationField(gl, shaders.rotation.vert, shaders.rotation.frag);
   const renderer      = new FieldRenderer(gl, shaders.render.vert, shaders.render.frag);
   const quadVao       = createFullScreenQuadVao(gl);
-  const mouseInjector = new MouseInjector(canvas, fluidField, CANVAS_FIELD_SIZE);
+  const mouseInjector   = new MouseInjector(canvas, fluidField, CANVAS_FIELD_SIZE);
+  const patternInjector = new PatternInjector(
+    canvas, fluidField, CANVAS_FIELD_SIZE, DISPLAY_GAP,
+    document.getElementById('controls-rotation'),
+  );
   const velocityControls = document.getElementById('controls-velocity');
   new ControlPanel(
     velocityControls,
@@ -112,6 +138,8 @@ async function main() {
     CANVAS_FIELD_SIZE,
     DISPLAY_GAP,
   );
+
+  injectCircularImpulse(fluidField, quadVao);
 
   let previousTime = performance.now();
   let animationFrameId = null;
@@ -122,6 +150,7 @@ async function main() {
     previousTime = currentTime;
 
     mouseInjector.applyPendingInjection(quadVao);
+    patternInjector.applyPendingPattern(quadVao);
 
     fluidField.step(deltaTime, quadVao);
     rotationField.recomputeFrom(fluidField.velocityTexture);
@@ -141,21 +170,38 @@ async function main() {
     animationFrameId = requestAnimationFrame(renderFrame);
   }
 
+  function stopLoop() {
+    cancelAnimationFrame(animationFrameId);
+    animationFrameId = null;
+  }
+
+  function startLoop() {
+    previousTime = performance.now();
+    animationFrameId = requestAnimationFrame(renderFrame);
+  }
+
   function togglePause() {
     paused = !paused;
     const button = document.getElementById('pause-button');
     if (paused) {
-      cancelAnimationFrame(animationFrameId);
-      animationFrameId = null;
+      stopLoop();
       button.textContent = 'Play';
     } else {
-      previousTime = performance.now();
       button.textContent = 'Pause';
-      animationFrameId = requestAnimationFrame(renderFrame);
+      startLoop();
     }
   }
 
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      stopLoop();
+    } else if (!paused) {
+      startLoop();
+    }
+  });
+
   document.getElementById('pause-button').addEventListener('click', togglePause);
+  document.getElementById('reset-button').addEventListener('click', () => fluidField.reset());
 
   animationFrameId = requestAnimationFrame(renderFrame);
 }

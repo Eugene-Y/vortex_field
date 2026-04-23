@@ -1,6 +1,6 @@
 'use strict';
 
-export const GRID_SIZE = 80;
+export const GRID_SIZE = 64;
 
 export const DISPLAY_SCALE = 8; // pixels per grid cell
 export const DISPLAY_GAP = 32; // pixel gap between the two fields

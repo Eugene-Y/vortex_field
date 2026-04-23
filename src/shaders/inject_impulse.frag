@@ -12,6 +12,7 @@ uniform float u_impulseStrength;
 
 vec2 gaussianImpulse(vec2 uv) {
   vec2 offset = uv - u_impulsePosition;
+  offset -= round(offset); // periodic minimum-image: wrap to (-0.5, 0.5]
   float distanceSquared = dot(offset, offset);
   float radiusSquared = u_impulseRadius * u_impulseRadius;
   float weight = exp(-distanceSquared / radiusSquared);

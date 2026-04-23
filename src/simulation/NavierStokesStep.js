@@ -37,6 +37,7 @@ export class NavierStokesStep {
     this._pressureProgram      = new ShaderProgram(gl, shaderSources.vert, shaderSources.pressure);
     this._subtractGradProgram  = new ShaderProgram(gl, shaderSources.vert, shaderSources.subtractGradient);
     this._injectImpulseProgram = new ShaderProgram(gl, shaderSources.vert, shaderSources.injectImpulse);
+    this._noiseProgram         = new ShaderProgram(gl, shaderSources.vert, shaderSources.noise);
   }
 
   get velocityTexture() {
@@ -72,6 +73,34 @@ export class NavierStokesStep {
     this._velocity.swap();
   }
 
+  // Adds per-cell random velocity. seed should differ each call for distinct noise.
+  injectNoise(strength, seed, quadVao) {
+    const gl = this._gl;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this._velocity.writeFramebuffer);
+    gl.viewport(0, 0, GRID_SIZE, GRID_SIZE);
+
+    this._noiseProgram.bind();
+    this._noiseProgram.setUniform1i('u_velocity', 0);
+    this._noiseProgram.setUniform1f('u_strength', strength);
+    this._noiseProgram.setUniform1f('u_seed', seed);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this._velocity.readTexture);
+
+    drawFullScreenQuad(gl, quadVao);
+    this._velocity.swap();
+  }
+
+  clearVelocity() {
+    const gl = this._gl;
+    // Both ping-pong buffers must be cleared.
+    for (let i = 0; i < 2; i++) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this._velocity.writeFramebuffer);
+      gl.clearBufferfv(gl.COLOR, 0, new Float32Array([0, 0, 0, 0]));
+      this._velocity.swap();
+    }
+  }
+
   dispose() {
     this._velocity.dispose();
     this._pressure.dispose();
@@ -82,6 +111,7 @@ export class NavierStokesStep {
     this._pressureProgram.dispose();
     this._subtractGradProgram.dispose();
     this._injectImpulseProgram.dispose();
+    this._noiseProgram.dispose();
   }
 
   _advect(deltaTime, quadVao) {
