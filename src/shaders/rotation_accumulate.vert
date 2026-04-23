@@ -87,7 +87,7 @@ void main() {
   int indexA = gl_VertexID / totalCells;
   int indexB = gl_VertexID % totalCells;
 
-  if (indexA == indexB) {
+  if (indexA >= indexB) {
     gl_Position = vec4(2.0, 2.0, 0.0, 1.0); // outside clip space → discarded
     gl_PointSize = 0.0;
     v_rotationContribution = 0.0;

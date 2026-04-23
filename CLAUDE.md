@@ -16,8 +16,7 @@ signed magnitude of that relative rotation is accumulated into the cell of Field
 whose grid coordinate corresponds to that center of rotation. Sign encodes direction
 (clockwise vs counter-clockwise). Magnitude encodes strength.
 
-This is NOT a local neighborhood approximation. All N² pairs are computed.
-Field size is 50×50 = 2500 cells → ~3 million pairs per frame. This is acceptable.
+This is not an only-local neighborhood approximation. By default, all unique pairs in the radius of GRID_SIZE/2 are evaluated. Since the instantaneous center of rotation and angular velocity are symmetric for any pair (A, B) and (B, A), the GPU kernel only computes unique pairs (`indexA < indexB`) and doubles their contribution, halving the required math and blending workload. The interaction can be further restricted spatially via the `pairRange` parameter.
 
 For pairs whose velocity vectors are parallel (pure translation, no rotation):
 the contribution is discarded — pure translation has no instantaneous center.
