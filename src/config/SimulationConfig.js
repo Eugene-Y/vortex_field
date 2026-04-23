@@ -8,7 +8,7 @@ const _str   = (key, def) => _p.has(key) ? _p.get(key) : def;
 // All tuneable defaults live here. URL params override them on load.
 const DEFAULTS = {
   gridSize:      64,
-  damping:       0.995,
+  dampingLoss:   0.005, // = 1 - damping; stored as loss for URL precision
   simSpeed:      1.0,
   brushRadius:   2.0,
   brushStrength: 100.0,
@@ -30,7 +30,7 @@ export const DISPLAY_GAP = 32; // pixel gap between the two fields
 
 export const PHYSICS_DEFAULTS = {
   viscosity:            0.001,
-  damping:              _float('damping',      DEFAULTS.damping),
+  damping:              1 - _float('dampingLoss', DEFAULTS.dampingLoss),
   diffusionIterations:  20,
   pressureIterations:   40,
   simulationSpeed:      _float('simSpeed',     DEFAULTS.simSpeed),
@@ -72,7 +72,7 @@ export const BRIGHTNESS_SLIDER_POSITIONS = {
 export function buildShareUrl() {
   const params = new URLSearchParams({
     gridSize:      GRID_SIZE,
-    damping:       PHYSICS_DEFAULTS.damping.toPrecision(4),
+    dampingLoss:   (1 - PHYSICS_DEFAULTS.damping).toExponential(3),
     simSpeed:      PHYSICS_DEFAULTS.simulationSpeed.toPrecision(3),
     brushRadius:   MOUSE_DEFAULTS.impulseRadius.toPrecision(3),
     brushStrength: MOUSE_DEFAULTS.impulseStrength.toPrecision(3),

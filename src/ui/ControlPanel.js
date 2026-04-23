@@ -51,7 +51,7 @@ export class ControlPanel {
     );
     // Damping slider works in "loss per frame" space (1 - damping) for a clean log scale.
     // Loss 0.0005 ≈ damping 0.9995 (very slow decay) to 0.2 ≈ damping 0.8 (fast decay).
-    this._addLogSlider(container, 'Damping loss',   0.000001, 0.2,
+    this._addLogSlider(container, 'Damping loss',   0.00000001, 0.2,
       () => 1 - PHYSICS_DEFAULTS.damping,
       v  => { PHYSICS_DEFAULTS.damping = 1 - v; }
     );
