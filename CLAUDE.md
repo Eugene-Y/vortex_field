@@ -2,7 +2,7 @@
 
 ## Concept
 
-Two coupled WebGL fields on a 50×50 grid (configurable via `GRID_SIZE`).
+Two coupled WebGL fields on a configurable grid (default 64×64, set via `GRID_SIZE`).
 
 **Field A — Velocity field.**
 A 2D fluid simulation (Navier-Stokes) on a grid. The user interacts with the mouse,
@@ -40,12 +40,14 @@ src/
   simulation/
     FluidField.js          — Field A: wraps physics step, exposes velocityTexture
     RotationField.js       — Field B: per-frame rotation accumulation via GPU kernel
-    NavierStokesStep.js    — physics step (advection, diffusion, pressure projection)
+    NavierStokesStep.js    — physics step (advection, diffusion, pressure projection,
+                             vorticity confinement)
     PairRotationKernel.js  — draws GRID_SIZE⁴ points, one per pair, additive blending
   rendering/
     FieldRenderer.js       — renders either field to the appropriate viewport
   interaction/
     MouseInjector.js       — translates mouse events into field impulses
+    PatternInjector.js     — double-click injection of velocity patterns on Field B
   ui/
     ControlPanel.js        — all DOM slider creation and wiring
   gl/
@@ -54,17 +56,21 @@ src/
     Framebuffer.js         — PingPongFramebuffer and SingleFramebuffer abstractions
     ShaderProgram.js       — shader compilation, uniform cache, bind/set methods
   shaders/
-    common.vert            — full-screen quad vertex shader (shared)
+    common.vert                — full-screen quad vertex shader (shared)
     advect.frag
     diffuse.frag
     divergence.frag
     pressure.frag
     subtract_gradient.frag
-    inject_impulse.frag
-    rotation_accumulate.vert  — per-pair vertex shader: computes center, clips to grid
-    rotation_accumulate.frag  — outputs ω contribution for additive blending
-    render.frag               — Reinhard tonemapping for both fields; HSV for velocity,
-                                orange/blue for rotation
+    inject_impulse.frag        — Gaussian impulse for mouse strokes
+    inject_disk.frag           — single-pass filled disk injection (spin/explode/implode)
+    vorticity_curl.frag        — computes scalar curl field
+    vorticity_confinement.frag — applies confinement force to re-energise vortices
+    noise.frag
+    rotation_accumulate.vert   — per-pair vertex shader: computes center, clips to grid
+    rotation_accumulate.frag   — outputs ω contribution for additive blending
+    render.frag                — Reinhard tonemapping for both fields; HSV for velocity,
+                                 orange/blue for rotation
 ```
 
 ## Code Quality Rules — Non-Negotiable
@@ -140,32 +146,36 @@ Every tuneable value lives in `src/config/SimulationConfig.js` as a named export
 No magic numbers anywhere else in the codebase. Current structure:
 
 ```js
-export const GRID_SIZE = 50;
+export const GRID_SIZE = 64;
 
 export const DISPLAY_SCALE = 8;  // pixels per grid cell (max; clamped to fit screen)
 export const DISPLAY_GAP = 32;   // pixel gap between the two fields
 
 export const PHYSICS_DEFAULTS = {
-  viscosity: 0.001,          // explicit viscosity (NOTE: see Known Limitations)
-  damping: 0.995,            // per-frame velocity retention (1 = no loss)
+  viscosity:           0.001,    // dominated by numerical diffusion; see Known Limitations
+  damping:             0.995,    // per-frame velocity retention (1 = no loss)
   diffusionIterations: 20,
-  pressureIterations: 40,
+  pressureIterations:  40,       // fewer = more compressible / gas-like
+  simulationSpeed:     1.0,      // dt multiplier; qualitatively changes flow character
+  boundaryMode:        0,        // 0=wrap 1=absorb 2=reflect
+  vorticityStrength:   0.0,      // vorticity confinement ε; 0 = disabled
 };
 
 export const MOUSE_DEFAULTS = {
-  impulseRadius: 2.0,        // brush radius in grid cells
+  impulseRadius:   2.0,  // brush radius in grid cells
   impulseStrength: 100.0,
+  patternScale:    0.5,  // pattern size as fraction of field
 };
 
 export const ROTATION_FIELD = {
   parallelThreshold: 0.001,  // below this cross-product magnitude → discard pair
   accumulationScale: 1.0,
-  pairRange: 1.0,             // interaction radius as fraction of gridSize/2 (see below)
+  pairRange:         1.0,    // signed: positive = local-first, negative = distant-first
 };
 
 export const RENDER_DEFAULTS = {
-  velocityToneMidpoint: 30.0,   // velocity magnitude that maps to 50% brightness
-  rotationToneMidpoint: 0.3,    // rotation ω that maps to 50% brightness
+  velocityToneMidpoint: 30.0,
+  rotationToneMidpoint: 0.3,
 };
 
 export const COLORS = {
@@ -177,38 +187,78 @@ export const COLORS = {
 
 ## UI Controls
 
-`ControlPanel.js` builds all sliders from DOM. All sliders are log-scaled (100 integer steps,
-linear in log space between min and max). The center position corresponds to the default value
-at construction time.
-
-Current sliders:
-- **Brightness** (under each field) — adjusts `velocityToneMidpoint` / `rotationToneMidpoint`
-- **Brush radius** — adjusts `MOUSE_DEFAULTS.impulseRadius` (range 0.5–20)
-- **Brush strength** — adjusts `MOUSE_DEFAULTS.impulseStrength` (range 5–500)
-- **Damping loss** — adjusts `PHYSICS_DEFAULTS.damping` via the transform
-  `loss = 1 - damping` (range 0.0005–0.2), displayed in loss space for clean log scale
+`ControlPanel.js` builds all sliders from DOM. Available slider types:
+- `_addLogSlider` — log-scaled, center = default value at construction
+- `_addLinearSlider` — linear, float display
+- `_addIntSlider` — linear, integer display
+- `_addSymmetricPowerSlider` — power curve symmetric around center; exponent < 1 gives
+  finer control near center (used for Pair range)
 
 Physics sliders appear below Field A. Brightness sliders appear below their respective field.
 
+Current sliders:
+- **Brightness** (under each field) — adjusts tone midpoints
+- **Boundary** (dropdown) — Wrap / Absorb / Reflect; Grid size input on same row
+- **Brush radius** — `MOUSE_DEFAULTS.impulseRadius` (log, 0.5–20)
+- **Brush strength** — `MOUSE_DEFAULTS.impulseStrength` (log, 1–500)
+- **dt** — `PHYSICS_DEFAULTS.simulationSpeed` (log, 0.1–10); qualitatively changes flow
+- **Damping loss** — `1 - damping` (log, near-zero to 0.2)
+- **Vorticity** — `vorticityStrength` (linear, 0–2); re-energises vortices; 0 = off
+- **Incompressibility (liquid / gas)** — inverted pressure iterations (1–100);
+  right = liquid (many iters, incompressible), left = gas (few iters, compressible)
+- **Pattern size** (under Field B) — `MOUSE_DEFAULTS.patternScale`
+- **Pair range** (under Field B) — power-curve symmetric slider, exponent 0.4;
+  positive = local pairs first, negative = distant pairs first
+
 **Pattern injection** (`PatternInjector.js` — double-click on Field B):
-A dropdown below Field B selects the injection pattern. Double-clicking anywhere on Field B
-injects it at the clicked grid position (same UV coordinates as Field A). Uses current brush
-radius and strength from the sliders. Adds to existing velocity, never resets it.
+A dropdown below Field B selects the injection pattern. Double-clicking injects at
+that UV position in Field A space. Uses current brush radius/strength. Adds to existing
+velocity, never resets it. Initial pattern is queued for first render frame (not applied
+at startup) to guarantee stable GL state.
 
 Current patterns:
-- **Polygons** (circle, triangle, square, pentagon, hexagon, heptagon, octagon, nonagon,
-  decagon) — 32 points along the perimeter with CCW tangential velocity
-- **Parallel stripes** — 5 horizontal stripes × 8 points, alternating ←→ flow
-  (seeds Kelvin-Helmholtz shear instability)
-- **Square grid lines** — 5 horizontal + 5 vertical lines of 7 points each, orthogonal
-  flow directions (↔ and ↕), creates crossing jets and junction vortices
-- **Triangular grid lines** — 3 families of 5 parallel lines at 0°/60°/120°, each flowing
-  along its line direction, creates hexagonal interference
-- **Scattered points** — hexagonal packing (center + ring of 6 + ring of 12), each pointing
-  radially outward from the pattern center
-- **Random noise** — per-cell pseudo-random velocity added via `noise.frag` shader; uses
-  current brush strength. Uniform coverage, no position dependency.
-- **Reset** — clears both ping-pong velocity buffers to zero
+- **Disk — spin / explode / implode** — filled disk injected via single shader pass
+  (`inject_disk.frag`); Gaussian radial falloff avoids boundary divergence artifacts
+- **Polygons** (circle, triangle, square … decagon) — perimeter with CCW tangential velocity
+- **Parallel stripes** — alternating ←→ flow (seeds Kelvin-Helmholtz instability)
+- **Square grid lines** — crossing orthogonal jets
+- **Triangular grid lines** — three families at 0°/60°/120°
+- **Scattered points** — hexagonal packing, radially outward
+- **Random noise** — per-cell pseudo-random velocity via `noise.frag`
+
+**Mouse injection** (`MouseInjector.js`):
+- `mousedown` on canvas sets `_pressedInField = true`; injection only fires if drag
+  originated on Field A — prevents slider interaction from leaking into the field
+- Between frames, the full stroke segment (prev → current position) is interpolated
+  at `0.75 × brushRadius` step spacing so fast motion leaves no gaps
+- Mouse leaving field bounds resets `_previousPosition` to prevent phantom strokes on re-entry
+
+## Boundary Conditions
+
+Three modes, selected via dropdown:
+
+**Wrap (0):** Periodic — texture wrap `REPEAT`, fields connect edge to edge.
+
+**Absorb (1):** Open boundary — fluid exits freely.
+- Advection: backtracked positions outside domain return `vec2(0)` (no energy smuggled in)
+- Pressure: Dirichlet `p=0` at ghost cells (consistent in both solve and gradient steps)
+- Velocity: no forced zeroing at boundary cells — fluid exits through natural advection
+- Diffusion: Neumann (clamp) — velocity continuous across boundary
+
+**Reflect (2):** Solid wall — normal velocity component negated at boundary cells.
+- Pressure: Neumann (clamp) at ghost cells
+- Diffusion: Neumann (clamp)
+
+## Vorticity Confinement
+
+Two-pass process after advection and diffusion, before pressure projection:
+1. `vorticity_curl.frag` — computes scalar curl `ω = ∂vy/∂x − ∂vx/∂y` (raw finite
+   differences, not divided by texelSize)
+2. `vorticity_confinement.frag` — computes `∇|ω|`, normalises it to unit vector `η`,
+   applies force `ε × ω × (η.y, −η.x) × dt` to velocity
+
+The force re-energises vortex cores that numerical diffusion would otherwise smooth away.
+Skipped entirely when `vorticityStrength == 0` (no GPU cost).
 
 ## WebGL Requirements
 
@@ -219,9 +269,6 @@ Current patterns:
 Without `EXT_float_blend`, additive blending into a float texture is undefined behavior:
 each draw call would overwrite rather than accumulate, so Field B would show only one
 random pair per pixel instead of the correct sum over all pairs.
-
-Physics framebuffers use `TEXTURE_WRAP_S/T = REPEAT` (periodic boundary conditions).
-This avoids wall accumulation artifacts that appear with `CLAMP_TO_EDGE`.
 
 ## Extensibility Requirements
 
@@ -243,7 +290,8 @@ The code must be written so the following changes require minimal surgery:
 **Adding UI controls:**
 - `SimulationConfig.js` values are the single source of truth
 - UI reads from and writes to config only, never touches simulation internals directly
-- Add sliders via `ControlPanel._addLogSlider()` or `ControlPanel._addSlider()`
+- Add sliders via `ControlPanel._addLogSlider()`, `_addLinearSlider()`, `_addIntSlider()`,
+  or `_addSymmetricPowerSlider()`
 - Every new control **must** have a corresponding URL parameter: add it to `DEFAULTS`,
   parse it with `_float`/`_int`/`_str` in `PHYSICS_DEFAULTS` / `MOUSE_DEFAULTS` / etc.,
   and serialize it in `buildShareUrl()`. This is required — share URLs must fully
@@ -255,35 +303,34 @@ The code must be written so the following changes require minimal surgery:
 
 ## Pair Interaction Range
 
-`ROTATION_FIELD.pairRange` (slider "Pair range" under Field B, range 0–1) limits which
-pairs contribute to Field B. For a pair (A, B), B is included only if its periodic
-minimum-image distance from A satisfies:
+`ROTATION_FIELD.pairRange` (slider "Pair range" under Field B, range −1 to +1) limits
+which pairs contribute to Field B.
 
-```
-|d_AB| ≤ pairRange × gridSize / 2
-```
+- **Positive** values include pairs within `pairRange × gridSize / 2` distance — local first.
+- **Negative** values include pairs BEYOND `|pairRange| × gridSize / 2` — distant first.
+- At **0** the field goes dark (no contributing pairs).
+- At **±1** all pairs within the inscribed circle contribute (corner pairs excluded at all
+  values — they exceed `gridSize/2` on the periodic torus, ≈22% of all pairs).
 
-Equivalently, the interaction **diameter** is `pairRange × gridSize`.
-
-- At **1.0** all pairs within the inscribed circle of the periodic grid contribute.
-  Corner pairs whose distance exceeds `gridSize/2` are excluded at all range values
-  (they are the diagonal extremes of the periodic torus and represent ≈22% of all pairs).
-- At **0.5** only pairs within `gridSize/4` radius contribute — a quarter of the field.
-- At **→ 0** the field goes dark (no contributing pairs).
-
-The discard is a single early-return in the vertex shader (`rotation_accumulate.vert`).
-The draw call still submits `GRID_SIZE⁴` vertices, so GPU work does not decrease with
-smaller range — only fragment writes and blending are skipped. A future optimisation
-could reduce the draw count for very small ranges.
+The slider uses a symmetric power curve (exponent 0.4) for finer control near zero.
+The discard is a single early-return in the vertex shader. The draw call still submits
+`GRID_SIZE⁴` vertices regardless of range — GPU vertex work is constant, only fragment
+writes are skipped. Higher |pairRange| = more GPU blend load.
 
 ## Known Limitations
 
 **Viscosity slider was removed.** The semi-Lagrangian advection scheme introduces numerical
-diffusion of approximately `h²/(2·dt)` ≈ 0.013 (at `GRID_SIZE=50`, `dt≈0.016`). Any explicit
-viscosity value below this threshold has no visible effect — the numerical diffusion dominates.
-A viscosity slider is therefore misleading and was removed. If viscosity control becomes
-important, it would require switching to a scheme with lower numerical diffusion (e.g. BFECC
-or MacCormack advection).
+diffusion of approximately `h²/(2·dt)`. Any explicit viscosity below this threshold has no
+visible effect. The `dt` slider (`simulationSpeed`) qualitatively changes the flow regime
+and is a more meaningful control.
+
+**Field B disappears at large grid sizes.** Field B draws `GRID_SIZE⁴` points. At
+GRID_SIZE=128 that is ~268M points; at 256 it is ~4.3 billion — GPU timeout. Use
+`pairRange` to reduce load at larger grid sizes.
+
+**CFL instability at very high impulse strength.** Semi-Lagrangian advection requires
+`velocity × dt / gridSize < 1` per cell. At extreme strength values the condition is
+violated and the field becomes chaotic. This is a fundamental limit of the scheme.
 
 ## Non-goals
 
@@ -295,3 +342,5 @@ or MacCormack advection).
 - export animation
 - reaction-diffusion
 - пресеты
+- temperature field / buoyancy (Boussinesq)
+- BFECC advection for lower numerical diffusion
