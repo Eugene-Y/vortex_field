@@ -63,6 +63,12 @@ export class PatternInjector {
     this._execute(this._select.value, center, quadVao);
   }
 
+  // Queues an injection to be applied on the next renderFrame call.
+  // Use this for startup injection to guarantee a stable GL state.
+  queueInitialInjection(center) {
+    this._pending = { action: this._select.value, center };
+  }
+
   applyPendingPattern(quadVao) {
     if (!this._pending) return;
     const { action, center } = this._pending;

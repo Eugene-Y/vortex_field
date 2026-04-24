@@ -136,7 +136,7 @@ async function main() {
 
   controlPanel.addRotationSliders(rotationControls);
 
-  patternInjector.injectAt([0.5, 0.5], quadVao);
+  patternInjector.queueInitialInjection([0.5, 0.5]);
 
   let previousTime = performance.now();
   let animationFrameId = null;
