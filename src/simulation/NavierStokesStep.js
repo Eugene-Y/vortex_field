@@ -43,6 +43,7 @@ export class NavierStokesStep {
     this._noiseProgram                = new ShaderProgram(gl, shaderSources.vert, shaderSources.noise);
     this._vorticityCurlProgram        = new ShaderProgram(gl, shaderSources.vert, shaderSources.vorticityCurl);
     this._vorticityConfinementProgram = new ShaderProgram(gl, shaderSources.vert, shaderSources.vorticityConfinement);
+    this._injectDiskProgram           = new ShaderProgram(gl, shaderSources.vert, shaderSources.injectDisk);
   }
 
   get velocityTexture() {
@@ -80,6 +81,29 @@ export class NavierStokesStep {
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     gl.bindVertexArray(null);
 
+    this._velocity.swap();
+  }
+
+  // Injects a filled disk of uniform velocity in a single shader pass — no Gaussian accumulation.
+  // mode: 0=spin(CCW), 1=explode, 2=implode
+  injectDisk(center, radiusUv, strength, mode, quadVao) {
+    const gl = this._gl;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this._velocity.writeFramebuffer);
+    gl.viewport(0, 0, GRID_SIZE, GRID_SIZE);
+
+    this._injectDiskProgram.bind();
+    this._injectDiskProgram.setUniform1i('u_velocity', 0);
+    this._injectDiskProgram.setUniform2f('u_center', center[0], center[1]);
+    this._injectDiskProgram.setUniform1f('u_radius', radiusUv);
+    this._injectDiskProgram.setUniform1f('u_strength', strength);
+    this._injectDiskProgram.setUniform1i('u_mode', mode);
+    this._injectDiskProgram.setUniform1i('u_boundary', PHYSICS_DEFAULTS.boundaryMode);
+    this._injectDiskProgram.setUniform1f('u_gridSize', GRID_SIZE);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this._velocity.readTexture);
+
+    drawFullScreenQuad(gl, quadVao);
     this._velocity.swap();
   }
 
@@ -125,6 +149,7 @@ export class NavierStokesStep {
     this._noiseProgram.dispose();
     this._vorticityCurlProgram.dispose();
     this._vorticityConfinementProgram.dispose();
+    this._injectDiskProgram.dispose();
   }
 
   _advect(deltaTime, quadVao) {

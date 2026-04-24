@@ -38,6 +38,7 @@ async function loadAllShaders() {
     noiseFrag,
     vorticityCurlFrag,
     vorticityConfinementFrag,
+    injectDiskFrag,
     rotationAccumulateVert,
     rotationAccumulateFrag,
     renderFrag,
@@ -52,6 +53,7 @@ async function loadAllShaders() {
     loadShaderSource('src/shaders/noise.frag'),
     loadShaderSource('src/shaders/vorticity_curl.frag'),
     loadShaderSource('src/shaders/vorticity_confinement.frag'),
+    loadShaderSource('src/shaders/inject_disk.frag'),
     loadShaderSource('src/shaders/rotation_accumulate.vert'),
     loadShaderSource('src/shaders/rotation_accumulate.frag'),
     loadShaderSource('src/shaders/render.frag'),
@@ -69,6 +71,7 @@ async function loadAllShaders() {
       noise:                  noiseFrag,
       vorticityCurl:          vorticityCurlFrag,
       vorticityConfinement:   vorticityConfinementFrag,
+      injectDisk:             injectDiskFrag,
     },
     rotation: {
       vert: rotationAccumulateVert,

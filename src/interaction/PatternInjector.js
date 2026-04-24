@@ -213,34 +213,12 @@ export class PatternInjector {
     }
   }
 
-  // Fills a disk via a grid scan — iterates a square bounding box, skips points outside the radius.
-  // mode='spin' → CCW tangential velocity, mode='explode' → radial outward velocity.
+  // Injects a filled disk in a single shader pass — no Gaussian point accumulation.
   _injectFilledDisk(center, mode, quadVao) {
     const patternRadius = MOUSE_DEFAULTS.patternScale * 0.5;
-    const brushRadius   = MOUSE_DEFAULTS.impulseRadius;
     const strength      = MOUSE_DEFAULTS.impulseStrength;
-    const stepUv        = (brushRadius * INJECTION_STEP_FRACTION) / GRID_SIZE;
-
-    for (let dy = -patternRadius; dy <= patternRadius; dy += stepUv) {
-      for (let dx = -patternRadius; dx <= patternRadius; dx += stepUv) {
-        const distSq = dx * dx + dy * dy;
-        if (distSq > patternRadius * patternRadius) continue;
-
-        const angle     = Math.atan2(dy, dx);
-        const direction = mode === 'spin'
-          ? [-Math.sin(angle),  Math.cos(angle)]  // CCW tangent
-          : mode === 'explode'
-          ? [ Math.cos(angle),  Math.sin(angle)]  // radial outward
-          : [-Math.cos(angle), -Math.sin(angle)]; // radial inward
-        this._fluidField.injectImpulse(
-          [center[0] + dx, center[1] + dy],
-          direction,
-          brushRadius,
-          strength,
-          quadVao,
-        );
-      }
-    }
+    const modeIndex     = mode === 'spin' ? 0 : mode === 'explode' ? 1 : 2;
+    this._fluidField.injectDisk(center, patternRadius, strength, modeIndex, quadVao);
   }
 
   // Five horizontal stripes with alternating ←→ flow — seeds Kelvin-Helmholtz shear instability.

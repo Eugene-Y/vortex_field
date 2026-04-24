@@ -26,6 +26,10 @@ export class FluidField {
     this._physicsStep.injectImpulse(position, direction, radius, strength, quadVao);
   }
 
+  injectDisk(center, radiusUv, strength, mode, quadVao) {
+    this._physicsStep.injectDisk(center, radiusUv, strength, mode, quadVao);
+  }
+
   addNoise(strength, seed, quadVao) {
     this._physicsStep.injectNoise(strength, seed, quadVao);
   }
