@@ -20,11 +20,11 @@ export class ControlPanel {
   addRotationSliders(container) {
     this._addLinearSlider(container, 'Pattern size', 0, 1,
       () => MOUSE_DEFAULTS.patternScale,
-      v  => { MOUSE_DEFAULTS.patternScale = v; }
+      v => { MOUSE_DEFAULTS.patternScale = v; }
     );
     this._addSymmetricPowerSlider(container, 'Pair range', -1, 1, 0.4,
       () => ROTATION_FIELD.pairRange,
-      v  => { ROTATION_FIELD.pairRange = v; },
+      v => { ROTATION_FIELD.pairRange = v; },
       'Positive: local rotation centers first. Negative: distant pairs first. Higher absolute value → more GPU load.'
     );
   }
@@ -36,37 +36,37 @@ export class ControlPanel {
       { value: 2, label: 'Reflect' },
     ],
       () => PHYSICS_DEFAULTS.boundaryMode,
-      v  => { PHYSICS_DEFAULTS.boundaryMode = v; }
+      v => { PHYSICS_DEFAULTS.boundaryMode = v; }
     );
     boundaryRow.querySelector('select').style.width = '70px';
     boundaryRow.appendChild(this._createGridSizeInput());
-    this._addLogSlider(container, 'Brush radius',   0.5,    20,
+    this._addLogSlider(container, 'Brush radius', 0.5, 20,
       () => MOUSE_DEFAULTS.impulseRadius,
-      v  => { MOUSE_DEFAULTS.impulseRadius = v; }
+      v => { MOUSE_DEFAULTS.impulseRadius = v; }
     );
-    this._addLogSlider(container, 'Brush strength', 1,      500,
+    this._addLogSlider(container, 'Brush strength', 1, 500,
       () => MOUSE_DEFAULTS.impulseStrength,
-      v  => { MOUSE_DEFAULTS.impulseStrength = v; }
+      v => { MOUSE_DEFAULTS.impulseStrength = v; }
     );
-    this._addLogSlider(container, 'dt',      0.1,    10.0,
+    this._addLogSlider(container, 'dt', 0.1, 10.0,
       () => PHYSICS_DEFAULTS.simulationSpeed,
-      v  => { PHYSICS_DEFAULTS.simulationSpeed = v; }
+      v => { PHYSICS_DEFAULTS.simulationSpeed = v; }
     );
     // Damping slider works in "loss per frame" space (1 - damping) for a clean log scale.
     // Loss 0.0005 ≈ damping 0.9995 (very slow decay) to 0.2 ≈ damping 0.8 (fast decay).
-    this._addLogSlider(container, 'Damping loss',   0.00000001, 0.2,
+    this._addLogSlider(container, 'Damping loss', 0.00000001, 0.2,
       () => 1 - PHYSICS_DEFAULTS.damping,
-      v  => { PHYSICS_DEFAULTS.damping = 1 - v; }
+      v => { PHYSICS_DEFAULTS.damping = 1 - v; }
     );
     this._addLinearSlider(container, 'Vorticity', 0, 2,
       () => PHYSICS_DEFAULTS.vorticityStrength,
-      v  => { PHYSICS_DEFAULTS.vorticityStrength = v; }
+      v => { PHYSICS_DEFAULTS.vorticityStrength = v; }
     );
     // Slider is inverted: right = gas (few iterations, compressible),
     // left = liquid (many iterations, incompressible).
-    this._addIntSlider(container, 'Compressibility (gas / liquid)', 1, 100,
+    this._addIntSlider(container, 'Incompressibility (gas->liquid)', 1, 100,
       () => 101 - PHYSICS_DEFAULTS.pressureIterations,
-      v  => { PHYSICS_DEFAULTS.pressureIterations = 101 - v; }
+      v => { PHYSICS_DEFAULTS.pressureIterations = 101 - v; }
     );
   }
 
@@ -89,10 +89,10 @@ export class ControlPanel {
   // Power-curve slider symmetric around center (maps to mid of [min,max]).
   // Exponent > 1 gives finer control near center; exponent = 1 is linear.
   _addSymmetricPowerSlider(container, label, min, max, exponent, getValue, setValue, hint = null) {
-    const mid          = (min + max) / 2;
-    const halfRange    = (max - min) / 2;
-    const toSlider     = v => Math.sign(v - mid) * Math.pow(Math.abs((v - mid) / halfRange), exponent) * 50 + 50;
-    const fromSlider   = t => mid + Math.sign(t - 50) * Math.pow(Math.abs((t - 50) / 50), 1 / exponent) * halfRange;
+    const mid = (min + max) / 2;
+    const halfRange = (max - min) / 2;
+    const toSlider = v => Math.sign(v - mid) * Math.pow(Math.abs((v - mid) / halfRange), exponent) * 50 + 50;
+    const fromSlider = t => mid + Math.sign(t - 50) * Math.pow(Math.abs((t - 50) / 50), 1 / exponent) * halfRange;
     const initialSliderValue = Math.round(Math.max(0, Math.min(100, toSlider(getValue()))));
 
     this._addSlider({
@@ -100,13 +100,13 @@ export class ControlPanel {
       label,
       initialSliderValue,
       formatValue: sliderValue => fromSlider(sliderValue).toFixed(3),
-      onChange:    sliderValue => setValue(fromSlider(sliderValue)),
+      onChange: sliderValue => setValue(fromSlider(sliderValue)),
       hint,
     });
   }
 
   _addIntSlider(container, label, min, max, getValue, setValue) {
-    const defaultValue       = getValue();
+    const defaultValue = getValue();
     const initialSliderValue = Math.round((defaultValue - min) / (max - min) * 100);
 
     this._addSlider({
@@ -124,7 +124,7 @@ export class ControlPanel {
   }
 
   _addLinearSlider(container, label, min, max, getValue, setValue) {
-    const defaultValue       = getValue();
+    const defaultValue = getValue();
     const initialSliderValue = Math.round((defaultValue - min) / (max - min) * 100);
 
     this._addSlider({
@@ -167,15 +167,15 @@ export class ControlPanel {
 
   _createGridSizeInput() {
     const label = document.createElement('span');
-    label.className   = 'control-label';
+    label.className = 'control-label';
     label.textContent = 'Grid size';
     label.style.marginLeft = '12px';
 
     const input = document.createElement('input');
-    input.id   = 'grid-size-input';
+    input.id = 'grid-size-input';
     input.type = 'number';
-    input.min  = '32';
-    input.max  = '512';
+    input.min = '32';
+    input.max = '512';
 
     const fragment = document.createDocumentFragment();
     fragment.appendChild(label);
