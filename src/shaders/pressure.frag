@@ -11,10 +11,8 @@ uniform int u_boundary;
 
 float samplePressure(vec2 uv) {
   if (u_boundary == 0) return texture(u_pressure, fract(uv)).r;
-  // Absorb: p=0 at boundary (Dirichlet) — fluid exits freely.
-  // Reflect: clamp (Neumann, zero gradient) — no flow through wall.
-  if (u_boundary == 1 &&
-      (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)) return 0.0;
+  // Absorb and reflect both use Neumann (zero gradient) — clamp to edge.
+  // Dirichlet (p=0) for absorb would create an inward pressure gradient, causing reflections.
   return texture(u_pressure, clamp(uv, 0.0, 1.0)).r;
 }
 

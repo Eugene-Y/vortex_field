@@ -22,6 +22,10 @@ vec2 applyBoundary(vec2 uv) {
 }
 
 vec2 sampleVelocity(vec2 uv) {
+  // Absorb: backtracked positions outside the domain contribute zero velocity,
+  // so energy is not smuggled in from the clamped edge.
+  if (u_boundary == 1 && (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0))
+    return vec2(0.0);
   return texture(u_velocity, applyBoundary(uv)).xy;
 }
 
