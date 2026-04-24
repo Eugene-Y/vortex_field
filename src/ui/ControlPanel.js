@@ -22,7 +22,7 @@ export class ControlPanel {
       () => MOUSE_DEFAULTS.patternScale,
       v  => { MOUSE_DEFAULTS.patternScale = v; }
     );
-    this._addLinearSlider(container, 'Pair range', -1, 1,
+    this._addSymmetricPowerSlider(container, 'Pair range', -1, 1, 1.5,
       () => ROTATION_FIELD.pairRange,
       v  => { ROTATION_FIELD.pairRange = v; }
     );
@@ -73,6 +73,24 @@ export class ControlPanel {
   }
 
   // Linear slider. getValue/setValue work in the natural value space.
+  // Power-curve slider symmetric around center (maps to mid of [min,max]).
+  // Exponent > 1 gives finer control near center; exponent = 1 is linear.
+  _addSymmetricPowerSlider(container, label, min, max, exponent, getValue, setValue) {
+    const mid          = (min + max) / 2;
+    const halfRange    = (max - min) / 2;
+    const toSlider     = v => Math.sign(v - mid) * Math.pow(Math.abs((v - mid) / halfRange), exponent) * 50 + 50;
+    const fromSlider   = t => mid + Math.sign(t - 50) * Math.pow(Math.abs((t - 50) / 50), 1 / exponent) * halfRange;
+    const initialSliderValue = Math.round(Math.max(0, Math.min(100, toSlider(getValue()))));
+
+    this._addSlider({
+      container,
+      label,
+      initialSliderValue,
+      formatValue: sliderValue => fromSlider(sliderValue).toFixed(3),
+      onChange:    sliderValue => setValue(fromSlider(sliderValue)),
+    });
+  }
+
   _addLinearSlider(container, label, min, max, getValue, setValue) {
     const defaultValue       = getValue();
     const initialSliderValue = Math.round((defaultValue - min) / (max - min) * 100);
