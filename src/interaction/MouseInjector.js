@@ -1,6 +1,8 @@
 'use strict';
 
-import { MOUSE_DEFAULTS } from '../config/SimulationConfig.js';
+import { MOUSE_DEFAULTS, GRID_SIZE } from '../config/SimulationConfig.js';
+
+const INJECTION_STEP_FRACTION = 0.75; // same coverage rule as PatternInjector
 
 /**
  * Translates mouse events on the velocity half of the canvas into impulse
@@ -10,15 +12,17 @@ import { MOUSE_DEFAULTS } from '../config/SimulationConfig.js';
  * maps to the velocity field. Clicks on the right half are ignored.
  *
  * Position is normalized to [0,1] UV space. Direction is derived from mouse delta.
+ * Between frames, the full stroke segment from previous to current position is
+ * interpolated so fast mouse movement leaves no gaps.
  */
 export class MouseInjector {
   constructor(canvas, fluidField, fieldSize) {
-    this._canvas = canvas;
+    this._canvas    = canvas;
     this._fluidField = fluidField;
-    this._fieldSize = fieldSize;
-    this._isPressed = false;
+    this._fieldSize  = fieldSize;
+    this._isPressed  = false;
     this._previousPosition = null;
-    this._pendingInjection = null;
+    this._pendingStroke    = null; // { from, to, direction }
 
     this._onMouseDown = this._onMouseDown.bind(this);
     this._onMouseMove = this._onMouseMove.bind(this);
@@ -29,21 +33,37 @@ export class MouseInjector {
     window.addEventListener('mouseup',   this._onMouseUp);
   }
 
-  /**
-   * Called each frame by the render loop. Applies any pending impulse injection.
-   */
   applyPendingInjection(quadVao) {
-    if (!this._pendingInjection) return;
-
-    const { position, direction, radius, strength } = this._pendingInjection;
-    this._pendingInjection = null;
-    this._fluidField.injectImpulse(position, direction, radius, strength, quadVao);
+    if (!this._pendingStroke) return;
+    const { from, to, direction } = this._pendingStroke;
+    this._pendingStroke = null;
+    this._injectStroke(from, to, direction, quadVao);
   }
 
   dispose() {
     this._canvas.removeEventListener('mousedown', this._onMouseDown);
     this._canvas.removeEventListener('mousemove', this._onMouseMove);
     window.removeEventListener('mouseup', this._onMouseUp);
+  }
+
+  _injectStroke(from, to, direction, quadVao) {
+    const dx = to[0] - from[0];
+    const dy = to[1] - from[1];
+    const lengthUv = Math.hypot(dx, dy);
+
+    const stepUv   = (MOUSE_DEFAULTS.impulseRadius * INJECTION_STEP_FRACTION) / GRID_SIZE;
+    const steps    = Math.max(1, Math.ceil(lengthUv / stepUv));
+
+    for (let i = 0; i < steps; i++) {
+      const t = steps === 1 ? 0 : i / (steps - 1);
+      const position = [from[0] + t * dx, from[1] + t * dy];
+      this._fluidField.injectImpulse(
+        position, direction,
+        MOUSE_DEFAULTS.impulseRadius,
+        MOUSE_DEFAULTS.impulseStrength,
+        quadVao,
+      );
+    }
   }
 
   _onMouseDown(event) {
@@ -59,18 +79,15 @@ export class MouseInjector {
     const currentPosition = this._normalizeToFieldUv(event);
     if (!currentPosition) return;
 
-    const direction = [
-      currentPosition[0] - this._previousPosition[0],
-      currentPosition[1] - this._previousPosition[1],
-    ];
-    const speed = Math.hypot(direction[0], direction[1]);
+    const dx = currentPosition[0] - this._previousPosition[0];
+    const dy = currentPosition[1] - this._previousPosition[1];
+    const speed = Math.hypot(dx, dy);
 
     if (speed > 0) {
-      this._pendingInjection = {
-        position: currentPosition,
-        direction: [direction[0] / speed, direction[1] / speed],
-        radius: MOUSE_DEFAULTS.impulseRadius,
-        strength: MOUSE_DEFAULTS.impulseStrength,
+      this._pendingStroke = {
+        from:      this._previousPosition,
+        to:        currentPosition,
+        direction: [dx / speed, dy / speed],
       };
     }
 
@@ -82,23 +99,19 @@ export class MouseInjector {
     this._previousPosition = null;
   }
 
-  /**
-   * Returns normalized [0,1] UV coordinates within the velocity field half,
-   * or null if the cursor is outside that half.
-   */
   _normalizeToFieldUv(event) {
-    const rect = this._canvas.getBoundingClientRect();
+    const rect   = this._canvas.getBoundingClientRect();
     const scaleX = this._canvas.width  / rect.width;
     const scaleY = this._canvas.height / rect.height;
 
     const pixelX = (event.clientX - rect.left) * scaleX;
     const pixelY = (event.clientY - rect.top)  * scaleY;
 
-    if (pixelX > this._fieldSize) return null; // right half = rotation field, not interactive
+    if (pixelX > this._fieldSize) return null;
 
     return [
       pixelX / this._fieldSize,
-      1.0 - pixelY / this._fieldSize, // flip Y: WebGL UV origin is bottom-left
+      1.0 - pixelY / this._fieldSize,
     ];
   }
 }
