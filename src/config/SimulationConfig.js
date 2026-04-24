@@ -13,9 +13,11 @@ const DEFAULTS = {
   brushRadius:   2.0,
   brushStrength: 100.0,
   patternScale:  0.5,
-  pairRange:     1.0,
-  velBrightness: 50,   // slider position 0–100
-  rotBrightness: 50,   // slider position 0–100
+  pairRange:          1.0,
+  pressureIterations: 40,
+  vorticity:          0.0,
+  velBrightness:      50,   // slider position 0–100
+  rotBrightness:      50,   // slider position 0–100
 };
 
 const VEL_TONE_BASE     = 30.0;
@@ -32,7 +34,7 @@ export const PHYSICS_DEFAULTS = {
   viscosity:            0.001,
   damping:              1 - _float('dampingLoss', DEFAULTS.dampingLoss),
   diffusionIterations:  20,
-  pressureIterations:   40,
+  pressureIterations:   _int('pressureIters', DEFAULTS.pressureIterations, 1, 100),
   simulationSpeed:      _float('simSpeed',     DEFAULTS.simSpeed),
   boundaryMode:         _int('boundary', 0, 0, 2), // 0=wrap 1=absorb 2=reflect
   vorticityStrength:    _float('vorticity', 0.0),
@@ -80,7 +82,8 @@ export function buildShareUrl() {
     patternScale:  MOUSE_DEFAULTS.patternScale.toPrecision(3),
     pairRange:     ROTATION_FIELD.pairRange.toPrecision(3),
     boundary:      PHYSICS_DEFAULTS.boundaryMode,
-    vorticity:     PHYSICS_DEFAULTS.vorticityStrength.toPrecision(3),
+    vorticity:      PHYSICS_DEFAULTS.vorticityStrength.toPrecision(3),
+    pressureIters:  PHYSICS_DEFAULTS.pressureIterations,
     pattern:       PATTERN_DEFAULTS.pattern,
     velBrightness: BRIGHTNESS_SLIDER_POSITIONS.velocity,
     rotBrightness: BRIGHTNESS_SLIDER_POSITIONS.rotation,

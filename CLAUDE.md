@@ -244,6 +244,10 @@ The code must be written so the following changes require minimal surgery:
 - `SimulationConfig.js` values are the single source of truth
 - UI reads from and writes to config only, never touches simulation internals directly
 - Add sliders via `ControlPanel._addLogSlider()` or `ControlPanel._addSlider()`
+- Every new control **must** have a corresponding URL parameter: add it to `DEFAULTS`,
+  parse it with `_float`/`_int`/`_str` in `PHYSICS_DEFAULTS` / `MOUSE_DEFAULTS` / etc.,
+  and serialize it in `buildShareUrl()`. This is required — share URLs must fully
+  reproduce the simulation state.
 
 **Adding a new color map:**
 - Add a named function to a `ColorMap.js` module
@@ -286,3 +290,8 @@ or MacCormack advection).
 - No UI framework. Plain HTML controls.
 - No build step. Native ES modules (`type="module"`).
 - No TypeScript (but code should read as if it were typed).
+
+## TODOs
+- export animation
+- reaction-diffusion
+- пресеты

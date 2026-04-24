@@ -62,6 +62,12 @@ export class ControlPanel {
       () => PHYSICS_DEFAULTS.vorticityStrength,
       v  => { PHYSICS_DEFAULTS.vorticityStrength = v; }
     );
+    // Slider is inverted: right = gas (few iterations, compressible),
+    // left = liquid (many iterations, incompressible).
+    this._addIntSlider(container, 'Compressibility (gas / liquid)', 1, 100,
+      () => 101 - PHYSICS_DEFAULTS.pressureIterations,
+      v  => { PHYSICS_DEFAULTS.pressureIterations = 101 - v; }
+    );
   }
 
   _addBrightnessSlider(container, label, config, key, toneBase, logRange, initialSliderValue, positionKey) {
@@ -96,6 +102,24 @@ export class ControlPanel {
       formatValue: sliderValue => fromSlider(sliderValue).toFixed(3),
       onChange:    sliderValue => setValue(fromSlider(sliderValue)),
       hint,
+    });
+  }
+
+  _addIntSlider(container, label, min, max, getValue, setValue) {
+    const defaultValue       = getValue();
+    const initialSliderValue = Math.round((defaultValue - min) / (max - min) * 100);
+
+    this._addSlider({
+      container,
+      label,
+      initialSliderValue: Math.max(0, Math.min(100, initialSliderValue)),
+      formatValue: sliderValue => {
+        const v = Math.round(min + (max - min) * sliderValue / 100);
+        return String(v);
+      },
+      onChange: sliderValue => {
+        setValue(Math.round(min + (max - min) * sliderValue / 100));
+      },
     });
   }
 
