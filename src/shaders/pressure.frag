@@ -11,8 +11,10 @@ uniform int u_boundary;
 
 float samplePressure(vec2 uv) {
   if (u_boundary == 0) return texture(u_pressure, fract(uv)).r;
-  // Absorb and reflect both use Neumann (zero gradient) — clamp to edge.
-  // Dirichlet (p=0) for absorb would create an inward pressure gradient, causing reflections.
+  // Absorb: p=0 (Dirichlet) — open boundary, consistent with subtract_gradient.
+  // Reflect: Neumann (clamp) — solid wall, zero pressure gradient.
+  if (u_boundary == 1 &&
+      (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)) return 0.0;
   return texture(u_pressure, clamp(uv, 0.0, 1.0)).r;
 }
 

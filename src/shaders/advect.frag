@@ -22,8 +22,7 @@ vec2 applyBoundary(vec2 uv) {
 }
 
 vec2 sampleVelocity(vec2 uv) {
-  // Absorb: backtracked positions outside the domain contribute zero velocity,
-  // so energy is not smuggled in from the clamped edge.
+  // Absorb: backtracked positions outside the domain return zero — no energy smuggled in.
   if (u_boundary == 1 && (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0))
     return vec2(0.0);
   return texture(u_velocity, applyBoundary(uv)).xy;
@@ -36,12 +35,7 @@ vec2 advectVelocity(vec2 uv) {
 }
 
 void main() {
-  if (u_boundary == 1) {
-    float ts = 1.0 / u_gridSize;
-    if (v_uv.x < ts || v_uv.x > 1.0 - ts || v_uv.y < ts || v_uv.y > 1.0 - ts) {
-      fragColor = vec4(0.0, 0.0, 0.0, 1.0);
-      return;
-    }
-  }
+  // Absorb: boundary cells advect freely — velocity exits without forced zeroing.
+  // Zeroing here creates a no-slip wall that generates pressure reflections.
   fragColor = vec4(advectVelocity(v_uv), 0.0, 1.0);
 }

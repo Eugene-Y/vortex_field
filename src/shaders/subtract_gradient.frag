@@ -11,6 +11,8 @@ uniform int u_boundary;
 
 float samplePressure(vec2 uv) {
   if (u_boundary == 0) return texture(u_pressure, fract(uv)).r;
+  // Absorb: p=0 at ghost cells (Dirichlet) — open boundary, fluid exits freely.
+  // Reflect: Neumann (clamp, zero gradient) — solid wall.
   if (u_boundary == 1 &&
       (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)) return 0.0;
   return texture(u_pressure, clamp(uv, 0.0, 1.0)).r;
@@ -32,12 +34,6 @@ void main() {
   bool onBottom = v_uv.y < u_texelSize;
   bool onTop    = v_uv.y > 1.0 - u_texelSize;
   bool onBoundary = onLeft || onRight || onBottom || onTop;
-
-  if (u_boundary == 1 && onBoundary) {
-    // Absorb: zero velocity so fluid exits cleanly.
-    fragColor = vec4(0.0, 0.0, 0.0, 1.0);
-    return;
-  }
 
   vec2 vel = subtractPressureGradient(v_uv);
 

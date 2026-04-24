@@ -13,9 +13,8 @@ uniform int u_boundary;
 
 vec2 sampleVelocity(vec2 uv) {
   if (u_boundary == 0) return texture(u_velocity, fract(uv)).xy;
-  // Absorb: outside = 0 (fluid has left). Reflect: clamp (Neumann).
-  if (u_boundary == 1 &&
-      (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)) return vec2(0.0);
+  // Both absorb and reflect use Neumann (clamp) for diffusion — velocity is continuous
+  // across the boundary so fluid exits smoothly without a forced zero wall.
   return texture(u_velocity, clamp(uv, 0.0, 1.0)).xy;
 }
 
