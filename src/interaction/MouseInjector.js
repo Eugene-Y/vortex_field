@@ -20,7 +20,7 @@ export class MouseInjector {
     this._canvas    = canvas;
     this._fluidField = fluidField;
     this._fieldSize  = fieldSize;
-    this._isPressed  = false;
+    this._pressedInField   = false; // true only when mousedown originated on Field A
     this._previousPosition = null;
     this._pendingStroke    = null; // { from, to, direction }
 
@@ -69,15 +69,26 @@ export class MouseInjector {
   _onMouseDown(event) {
     const position = this._normalizeToFieldUv(event);
     if (!position) return;
-    this._isPressed = true;
+    this._pressedInField   = true;
     this._previousPosition = position;
   }
 
   _onMouseMove(event) {
-    if (!this._isPressed) return;
+    if (!this._pressedInField) return;
 
     const currentPosition = this._normalizeToFieldUv(event);
-    if (!currentPosition) return;
+
+    if (!currentPosition) {
+      // Mouse left Field A — forget previous position so re-entry doesn't
+      // create a phantom stroke spanning the gap.
+      this._previousPosition = null;
+      return;
+    }
+
+    if (!this._previousPosition) {
+      this._previousPosition = currentPosition;
+      return;
+    }
 
     const dx = currentPosition[0] - this._previousPosition[0];
     const dy = currentPosition[1] - this._previousPosition[1];
@@ -95,7 +106,7 @@ export class MouseInjector {
   }
 
   _onMouseUp() {
-    this._isPressed = false;
+    this._pressedInField   = false;
     this._previousPosition = null;
   }
 
@@ -107,7 +118,8 @@ export class MouseInjector {
     const pixelX = (event.clientX - rect.left) * scaleX;
     const pixelY = (event.clientY - rect.top)  * scaleY;
 
-    if (pixelX > this._fieldSize) return null;
+    if (pixelX < 0 || pixelX > this._fieldSize) return null;
+    if (pixelY < 0 || pixelY > this._fieldSize) return null;
 
     return [
       pixelX / this._fieldSize,
