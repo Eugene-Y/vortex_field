@@ -7,17 +7,17 @@ const _str   = (key, def) => _p.has(key) ? _p.get(key) : def;
 
 // All tuneable defaults live here. URL params override them on load.
 const DEFAULTS = {
-  gridSize:      64,
-  dampingLoss:   0.005, // = 1 - damping; stored as loss for URL precision
-  simSpeed:      1.0,
+  gridSize:      100,
+  dampingLoss:   1e-7, // = 1 - damping; stored as loss for URL precision
+  simSpeed:      2.0,
   brushRadius:   2.0,
   brushStrength: 100.0,
-  patternScale:  0.5,
-  pairRange:          1.0,
+  patternScale:  0.7,
+  pairRange:          0.2,
   pressureIterations: 40,
   vorticity:          0.0,
   velBrightness:      50,   // slider position 0–100
-  rotBrightness:      50,   // slider position 0–100
+  rotBrightness:      70,   // slider position 0–100
 };
 
 const VEL_TONE_BASE     = 30.0;
@@ -27,7 +27,7 @@ export const ROT_LOG_RANGE = Math.log(ROT_TONE_BASE * Math.exp(3) * 20.0 / ROT_T
 
 export const GRID_SIZE = _int('gridSize', DEFAULTS.gridSize, 32, 512);
 
-export const DISPLAY_SCALE = 8; // pixels per grid cell
+export const DISPLAY_SCALE = 7; // pixels per grid cell
 export const DISPLAY_GAP = 32; // pixel gap between the two fields
 
 export const PHYSICS_DEFAULTS = {
