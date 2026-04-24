@@ -24,12 +24,13 @@ export class ControlPanel {
     );
     this._addSymmetricPowerSlider(container, 'Pair range', -1, 1, 1.5,
       () => ROTATION_FIELD.pairRange,
-      v  => { ROTATION_FIELD.pairRange = v; }
+      v  => { ROTATION_FIELD.pairRange = v; },
+      'Positive: local rotation centers first. Negative: distant pairs first. Higher absolute value → more GPU load.'
     );
   }
 
   _buildPhysicsSliders(container) {
-    this._addSelect(container, 'Boundary', [
+    const boundaryRow = this._addSelect(container, 'Boundary', [
       { value: 0, label: 'Wrap' },
       { value: 1, label: 'Absorb' },
       { value: 2, label: 'Reflect' },
@@ -37,6 +38,8 @@ export class ControlPanel {
       () => PHYSICS_DEFAULTS.boundaryMode,
       v  => { PHYSICS_DEFAULTS.boundaryMode = v; }
     );
+    boundaryRow.querySelector('select').style.width = '70px';
+    boundaryRow.appendChild(this._createGridSizeInput());
     this._addLogSlider(container, 'Brush radius',   0.5,    20,
       () => MOUSE_DEFAULTS.impulseRadius,
       v  => { MOUSE_DEFAULTS.impulseRadius = v; }
@@ -54,6 +57,10 @@ export class ControlPanel {
     this._addLogSlider(container, 'Damping loss',   0.00000001, 0.2,
       () => 1 - PHYSICS_DEFAULTS.damping,
       v  => { PHYSICS_DEFAULTS.damping = 1 - v; }
+    );
+    this._addLinearSlider(container, 'Vorticity', 0, 2,
+      () => PHYSICS_DEFAULTS.vorticityStrength,
+      v  => { PHYSICS_DEFAULTS.vorticityStrength = v; }
     );
   }
 
@@ -75,7 +82,7 @@ export class ControlPanel {
   // Linear slider. getValue/setValue work in the natural value space.
   // Power-curve slider symmetric around center (maps to mid of [min,max]).
   // Exponent > 1 gives finer control near center; exponent = 1 is linear.
-  _addSymmetricPowerSlider(container, label, min, max, exponent, getValue, setValue) {
+  _addSymmetricPowerSlider(container, label, min, max, exponent, getValue, setValue, hint = null) {
     const mid          = (min + max) / 2;
     const halfRange    = (max - min) / 2;
     const toSlider     = v => Math.sign(v - mid) * Math.pow(Math.abs((v - mid) / halfRange), exponent) * 50 + 50;
@@ -88,6 +95,7 @@ export class ControlPanel {
       initialSliderValue,
       formatValue: sliderValue => fromSlider(sliderValue).toFixed(3),
       onChange:    sliderValue => setValue(fromSlider(sliderValue)),
+      hint,
     });
   }
 
@@ -133,6 +141,24 @@ export class ControlPanel {
     });
   }
 
+  _createGridSizeInput() {
+    const label = document.createElement('span');
+    label.className   = 'control-label';
+    label.textContent = 'Grid size';
+    label.style.marginLeft = '12px';
+
+    const input = document.createElement('input');
+    input.id   = 'grid-size-input';
+    input.type = 'number';
+    input.min  = '32';
+    input.max  = '512';
+
+    const fragment = document.createDocumentFragment();
+    fragment.appendChild(label);
+    fragment.appendChild(input);
+    return fragment;
+  }
+
   _addSelect(container, label, options, getValue, setValue) {
     const wrapper = document.createElement('div');
     wrapper.className = 'control-row';
@@ -156,9 +182,10 @@ export class ControlPanel {
     wrapper.appendChild(labelEl);
     wrapper.appendChild(select);
     container.appendChild(wrapper);
+    return wrapper;
   }
 
-  _addSlider({ container, label, initialSliderValue, formatValue, onChange }) {
+  _addSlider({ container, label, initialSliderValue, formatValue, onChange, hint = null }) {
     const wrapper = document.createElement('div');
     wrapper.className = 'control-row';
 
@@ -187,5 +214,11 @@ export class ControlPanel {
     wrapper.appendChild(slider);
     if (formatValue) wrapper.appendChild(valueEl);
     container.appendChild(wrapper);
+    if (hint) {
+      const hintEl = document.createElement('div');
+      hintEl.className = 'control-hint';
+      hintEl.textContent = hint;
+      container.appendChild(hintEl);
+    }
   }
 }

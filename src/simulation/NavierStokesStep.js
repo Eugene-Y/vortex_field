@@ -30,14 +30,19 @@ export class NavierStokesStep {
     this._divergence = new SingleFramebuffer(
       gl, GRID_SIZE, GRID_SIZE, gl.R32F, gl.RED, gl.FLOAT
     );
+    this._curl = new SingleFramebuffer(
+      gl, GRID_SIZE, GRID_SIZE, gl.R32F, gl.RED, gl.FLOAT
+    );
 
-    this._advectProgram        = new ShaderProgram(gl, shaderSources.vert, shaderSources.advect);
-    this._diffuseProgram       = new ShaderProgram(gl, shaderSources.vert, shaderSources.diffuse);
-    this._divergenceProgram    = new ShaderProgram(gl, shaderSources.vert, shaderSources.divergence);
-    this._pressureProgram      = new ShaderProgram(gl, shaderSources.vert, shaderSources.pressure);
-    this._subtractGradProgram  = new ShaderProgram(gl, shaderSources.vert, shaderSources.subtractGradient);
-    this._injectImpulseProgram = new ShaderProgram(gl, shaderSources.vert, shaderSources.injectImpulse);
-    this._noiseProgram         = new ShaderProgram(gl, shaderSources.vert, shaderSources.noise);
+    this._advectProgram               = new ShaderProgram(gl, shaderSources.vert, shaderSources.advect);
+    this._diffuseProgram              = new ShaderProgram(gl, shaderSources.vert, shaderSources.diffuse);
+    this._divergenceProgram           = new ShaderProgram(gl, shaderSources.vert, shaderSources.divergence);
+    this._pressureProgram             = new ShaderProgram(gl, shaderSources.vert, shaderSources.pressure);
+    this._subtractGradProgram         = new ShaderProgram(gl, shaderSources.vert, shaderSources.subtractGradient);
+    this._injectImpulseProgram        = new ShaderProgram(gl, shaderSources.vert, shaderSources.injectImpulse);
+    this._noiseProgram                = new ShaderProgram(gl, shaderSources.vert, shaderSources.noise);
+    this._vorticityCurlProgram        = new ShaderProgram(gl, shaderSources.vert, shaderSources.vorticityCurl);
+    this._vorticityConfinementProgram = new ShaderProgram(gl, shaderSources.vert, shaderSources.vorticityConfinement);
   }
 
   get velocityTexture() {
@@ -47,6 +52,9 @@ export class NavierStokesStep {
   step(deltaTime, quadVao) {
     this._advect(deltaTime, quadVao);
     this._diffuse(deltaTime, quadVao);
+    if (PHYSICS_DEFAULTS.vorticityStrength > 0) {
+      this._applyVorticityConfinement(deltaTime, quadVao);
+    }
     this._solvePressureAndProjectVelocity(quadVao);
   }
 
@@ -107,6 +115,7 @@ export class NavierStokesStep {
     this._velocity.dispose();
     this._pressure.dispose();
     this._divergence.dispose();
+    this._curl.dispose();
     this._advectProgram.dispose();
     this._diffuseProgram.dispose();
     this._divergenceProgram.dispose();
@@ -114,6 +123,8 @@ export class NavierStokesStep {
     this._subtractGradProgram.dispose();
     this._injectImpulseProgram.dispose();
     this._noiseProgram.dispose();
+    this._vorticityCurlProgram.dispose();
+    this._vorticityConfinementProgram.dispose();
   }
 
   _advect(deltaTime, quadVao) {
@@ -162,6 +173,47 @@ export class NavierStokesStep {
       drawFullScreenQuad(gl, quadVao);
       this._velocity.swap();
     }
+  }
+
+  _applyVorticityConfinement(deltaTime, quadVao) {
+    this._computeCurl(quadVao);
+    this._addConfinementForce(deltaTime, quadVao);
+  }
+
+  _computeCurl(quadVao) {
+    const gl = this._gl;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this._curl.framebuffer);
+    gl.viewport(0, 0, GRID_SIZE, GRID_SIZE);
+
+    this._vorticityCurlProgram.bind();
+    this._vorticityCurlProgram.setUniform1i('u_velocity', 0);
+    this._vorticityCurlProgram.setUniform1f('u_texelSize', TEXEL_SIZE);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this._velocity.readTexture);
+
+    drawFullScreenQuad(gl, quadVao);
+  }
+
+  _addConfinementForce(deltaTime, quadVao) {
+    const gl = this._gl;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this._velocity.writeFramebuffer);
+    gl.viewport(0, 0, GRID_SIZE, GRID_SIZE);
+
+    this._vorticityConfinementProgram.bind();
+    this._vorticityConfinementProgram.setUniform1i('u_velocity', 0);
+    this._vorticityConfinementProgram.setUniform1i('u_curl', 1);
+    this._vorticityConfinementProgram.setUniform1f('u_texelSize', TEXEL_SIZE);
+    this._vorticityConfinementProgram.setUniform1f('u_strength', PHYSICS_DEFAULTS.vorticityStrength);
+    this._vorticityConfinementProgram.setUniform1f('u_deltaTime', deltaTime);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this._velocity.readTexture);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this._curl.texture);
+
+    drawFullScreenQuad(gl, quadVao);
+    this._velocity.swap();
   }
 
   _solvePressureAndProjectVelocity(quadVao) {

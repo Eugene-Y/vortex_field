@@ -35,6 +35,7 @@ export const PHYSICS_DEFAULTS = {
   pressureIterations:   40,
   simulationSpeed:      _float('simSpeed',     DEFAULTS.simSpeed),
   boundaryMode:         _int('boundary', 0, 0, 2), // 0=wrap 1=absorb 2=reflect
+  vorticityStrength:    _float('vorticity', 0.0),
 };
 
 export const MOUSE_DEFAULTS = {
@@ -79,6 +80,7 @@ export function buildShareUrl() {
     patternScale:  MOUSE_DEFAULTS.patternScale.toPrecision(3),
     pairRange:     ROTATION_FIELD.pairRange.toPrecision(3),
     boundary:      PHYSICS_DEFAULTS.boundaryMode,
+    vorticity:     PHYSICS_DEFAULTS.vorticityStrength.toPrecision(3),
     pattern:       PATTERN_DEFAULTS.pattern,
     velBrightness: BRIGHTNESS_SLIDER_POSITIONS.velocity,
     rotBrightness: BRIGHTNESS_SLIDER_POSITIONS.rotation,
