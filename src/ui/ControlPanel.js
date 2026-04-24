@@ -22,7 +22,7 @@ export class ControlPanel {
       () => MOUSE_DEFAULTS.patternScale,
       v  => { MOUSE_DEFAULTS.patternScale = v; }
     );
-    this._addSymmetricPowerSlider(container, 'Pair range', -1, 1, 1.5,
+    this._addSymmetricPowerSlider(container, 'Pair range', -1, 1, 0.4,
       () => ROTATION_FIELD.pairRange,
       v  => { ROTATION_FIELD.pairRange = v; },
       'Positive: local rotation centers first. Negative: distant pairs first. Higher absolute value → more GPU load.'
@@ -48,7 +48,7 @@ export class ControlPanel {
       () => MOUSE_DEFAULTS.impulseStrength,
       v  => { MOUSE_DEFAULTS.impulseStrength = v; }
     );
-    this._addLogSlider(container, 'Sim speed',      0.1,    10.0,
+    this._addLogSlider(container, 'dt',      0.1,    10.0,
       () => PHYSICS_DEFAULTS.simulationSpeed,
       v  => { PHYSICS_DEFAULTS.simulationSpeed = v; }
     );
