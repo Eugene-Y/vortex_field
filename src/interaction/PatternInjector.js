@@ -50,16 +50,17 @@ function stepsForUvLength(uvLength, radiusInCells) {
 }
 
 export class PatternInjector {
-  constructor(canvas, fluidField, fieldSize, displayGap, dropdownContainer) {
-    this._canvas     = canvas;
-    this._fluidField = fluidField;
-    this._fieldSize  = fieldSize;
-    this._displayGap = displayGap;
-    this._pending    = null;
-    this._select     = this._buildDropdown(dropdownContainer);
+  constructor(canvasVelocity, fluidField, fieldSize, displayGap, dropdownContainer, canvasRotation) {
+    this._canvas         = canvasVelocity;
+    this._canvasRotation = canvasRotation || canvasVelocity;
+    this._fluidField     = fluidField;
+    this._fieldSize      = fieldSize;
+    this._displayGap     = displayGap;
+    this._pending        = null;
+    this._select         = this._buildDropdown(dropdownContainer);
 
     this._onDblClick = this._onDblClick.bind(this);
-    canvas.addEventListener('dblclick', this._onDblClick);
+    this._canvasRotation.addEventListener('dblclick', this._onDblClick);
   }
 
   injectAt(center, quadVao) {
@@ -80,7 +81,7 @@ export class PatternInjector {
   }
 
   dispose() {
-    this._canvas.removeEventListener('dblclick', this._onDblClick);
+    this._canvasRotation.removeEventListener('dblclick', this._onDblClick);
   }
 
   _buildDropdown(container) {
@@ -120,19 +121,17 @@ export class PatternInjector {
     }
   }
 
-  // Maps a double-click on the right (rotation) field half to UV [0,1]² in Field A space.
+  // Maps a double-click on canvas-rotation to UV [0,1]² in Field A space.
+  // The two canvases share the same grid UV space, so no offset is needed.
   _rightFieldClickToUv(event) {
-    const rect   = this._canvas.getBoundingClientRect();
-    const scaleX = this._canvas.width  / rect.width;
-    const scaleY = this._canvas.height / rect.height;
+    const rect   = this._canvasRotation.getBoundingClientRect();
+    const scaleX = this._canvasRotation.width  / rect.width;
+    const scaleY = this._canvasRotation.height / rect.height;
 
     const pixelX = (event.clientX - rect.left) * scaleX;
     const pixelY = (event.clientY - rect.top)  * scaleY;
 
-    const rightStart = this._fieldSize + this._displayGap;
-    if (pixelX < rightStart) return null;
-
-    const u = (pixelX - rightStart) / this._fieldSize;
+    const u = pixelX / this._fieldSize;
     const v = 1.0 - pixelY / this._fieldSize;
 
     if (u < 0 || u > 1 || v < 0 || v > 1) return null;

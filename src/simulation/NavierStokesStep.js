@@ -50,6 +50,10 @@ export class NavierStokesStep {
     return this._velocity.readTexture;
   }
 
+  get velocityFramebuffer() {
+    return this._velocity.readFramebuffer;
+  }
+
   step(deltaTime, quadVao) {
     this._advect(deltaTime, quadVao);
     this._diffuse(deltaTime, quadVao);

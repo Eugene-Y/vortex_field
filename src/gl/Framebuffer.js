@@ -21,6 +21,10 @@ export class PingPongFramebuffer {
     return this._buffers[this._readIndex].texture;
   }
 
+  get readFramebuffer() {
+    return this._buffers[this._readIndex].framebuffer;
+  }
+
   get writeFramebuffer() {
     return this._buffers[1 - this._readIndex].framebuffer;
   }

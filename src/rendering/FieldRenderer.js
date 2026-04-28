@@ -4,7 +4,6 @@ import { ShaderProgram } from '../gl/ShaderProgram.js';
 import { COLORS, RENDER_DEFAULTS } from '../config/SimulationConfig.js';
 
 const RENDER_MODE_VELOCITY = 0;
-const RENDER_MODE_ROTATION = 1;
 
 /**
  * Renders a field texture to the currently active viewport using a full-screen quad.
@@ -18,10 +17,6 @@ export class FieldRenderer {
 
   renderVelocityField(texture, quadVao) {
     this._renderField(texture, quadVao, RENDER_MODE_VELOCITY);
-  }
-
-  renderRotationField(texture, quadVao) {
-    this._renderField(texture, quadVao, RENDER_MODE_ROTATION);
   }
 
   _renderField(texture, quadVao, mode) {
