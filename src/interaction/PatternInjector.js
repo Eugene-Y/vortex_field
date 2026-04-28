@@ -10,6 +10,9 @@ const PATTERNS = [
   { value: 'disk-spin',    label: 'Disk — spin'        },
   { value: 'disk-explode', label: 'Disk — explode'     },
   { value: 'disk-implode', label: 'Disk — implode'     },
+  { value: 'cross-spin',    label: 'Cross — spin'      },
+  { value: 'cross-explode', label: 'Cross — explode'   },
+  { value: 'cross-implode', label: 'Cross — implode'   },
   { value: 'circle',    label: 'Circle'                },
   { value: 'triangle',  label: 'Triangle'              },
   { value: 'square',    label: 'Square'                },
@@ -138,7 +141,7 @@ export class PatternInjector {
 
   _execute(action, center, quadVao) {
     if (action === 'noise') {
-      this._fluidField.addNoise(MOUSE_DEFAULTS.impulseStrength, Math.random(), quadVao);
+      this._injectNoise(quadVao);
       return;
     }
 
@@ -150,6 +153,9 @@ export class PatternInjector {
     if (action === 'disk-spin')    this._injectFilledDisk(center, 'spin', quadVao);
     if (action === 'disk-explode') this._injectFilledDisk(center, 'explode', quadVao);
     if (action === 'disk-implode') this._injectFilledDisk(center, 'implode', quadVao);
+    if (action === 'cross-spin')    this._injectCross(center, 'spin', quadVao);
+    if (action === 'cross-explode') this._injectCross(center, 'explode', quadVao);
+    if (action === 'cross-implode') this._injectCross(center, 'implode', quadVao);
     if (action === 'stripes')   this._injectStripes(center, quadVao);
     if (action === 'gridlines') this._injectSquareGridLines(center, quadVao);
     if (action === 'trilines')  this._injectTriangularGridLines(center, quadVao);
@@ -225,6 +231,73 @@ export class PatternInjector {
     const strength      = MOUSE_DEFAULTS.impulseStrength;
     const modeIndex     = mode === 'spin' ? 0 : mode === 'explode' ? 1 : 2;
     this._fluidField.injectDisk(center, patternRadius, strength, modeIndex, quadVao);
+  }
+
+  // At radius ≤ 1 every grid cell gets its own random direction (per-pixel noise).
+  // At radius > 1 the field is tiled with overlapping Gaussian impulses (step = 0.75 × radius)
+  // each pointing in a freshly randomised direction — coarser, blobby noise.
+  _injectNoise(quadVao) {
+    const brushRadius = MOUSE_DEFAULTS.impulseRadius;
+    const strength    = MOUSE_DEFAULTS.impulseStrength;
+
+    if (brushRadius <= 1) {
+      this._fluidField.addNoise(strength, Math.random(), quadVao);
+      return;
+    }
+
+    const stepUv = (brushRadius * INJECTION_STEP_FRACTION) / GRID_SIZE;
+    const cols   = Math.ceil(1 / stepUv) + 1;
+    const rows   = Math.ceil(1 / stepUv) + 1;
+
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const u     = col * stepUv;
+        const v     = row * stepUv;
+        const angle = Math.random() * 2 * Math.PI;
+        this._fluidField.injectImpulse(
+          [u, v],
+          [Math.cos(angle), Math.sin(angle)],
+          brushRadius,
+          strength,
+          quadVao,
+        );
+      }
+    }
+  }
+
+  // Four arms of a cross (at 0°/90°/180°/270°), each injected from center outward.
+  // spin: CCW tangential velocity along each arm (like wheel spokes).
+  // explode: velocity pointing outward along each arm.
+  // implode: velocity pointing inward along each arm.
+  _injectCross(center, mode, quadVao) {
+    const patternRadius = MOUSE_DEFAULTS.patternScale * 0.5;
+    const brushRadius   = MOUSE_DEFAULTS.impulseRadius;
+    const strength      = MOUSE_DEFAULTS.impulseStrength;
+
+    // Arm directions and their CCW perpendiculars for spin.
+    const arms = [
+      { armDir: [ 1,  0], spinDir: [ 0,  1] }, // right  → spin up
+      { armDir: [ 0,  1], spinDir: [-1,  0] }, // top    → spin left
+      { armDir: [-1,  0], spinDir: [ 0, -1] }, // left   → spin down
+      { armDir: [ 0, -1], spinDir: [ 1,  0] }, // bottom → spin right
+    ];
+
+    const steps = stepsForUvLength(patternRadius, brushRadius);
+
+    for (const { armDir, spinDir } of arms) {
+      for (let step = 0; step < steps; step++) {
+        const t        = step / (steps - 1);
+        const position = [
+          center[0] + armDir[0] * t * patternRadius,
+          center[1] + armDir[1] * t * patternRadius,
+        ];
+        const direction =
+          mode === 'spin'    ? spinDir :
+          mode === 'explode' ? armDir  :
+          [-armDir[0], -armDir[1]]; // implode
+        this._fluidField.injectImpulse(position, direction, brushRadius, strength, quadVao);
+      }
+    }
   }
 
   // Five horizontal stripes with alternating ←→ flow — seeds Kelvin-Helmholtz shear instability.
