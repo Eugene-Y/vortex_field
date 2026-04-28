@@ -23,7 +23,7 @@ const DEFAULTS = {
 const VEL_TONE_BASE     = 30.0;
 const ROT_TONE_BASE     = 0.3;
 export const VEL_LOG_RANGE = 3;
-export const ROT_LOG_RANGE = Math.log(ROT_TONE_BASE * Math.exp(3) * 20.0 / ROT_TONE_BASE); // ≈5.485
+export const ROT_LOG_RANGE = Math.log(ROT_TONE_BASE * Math.exp(3) * 200.0 / ROT_TONE_BASE); 
 
 export const GRID_SIZE = _int('gridSize', DEFAULTS.gridSize, 32, 512);
 
