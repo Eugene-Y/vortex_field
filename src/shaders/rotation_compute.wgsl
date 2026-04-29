@@ -87,40 +87,61 @@ fn computeRotation(
   let velA   = textureLoad(velocityTexture, vec2i(colA, rowA), 0).xy;
   if (length(velA) < 1e-6) { return; }
 
-  let radius   = params.pairRange * gSize * 0.5;
-  let iRadius  = i32(ceil(radius));
-  let radiusSq = radius * radius;
+  // Positive pairRange r: pairs within [0,   r·N/2]         — local-first.
+  // Negative pairRange r: pairs within [(1+r)·N/2, N/2]     — distant-first.
+  // Both ±1 include all pairs; near 0 → very few pairs; at 0 → none.
+  let isNegative  = params.pairRange < 0.0;
+  let minRadius   = select(0.0, (1.0 + params.pairRange) * gSize * 0.5, isNegative);
+  let maxRadius   = select(params.pairRange * gSize * 0.5, gSize * 0.5, isNegative);
+  let iMaxRadius  = i32(ceil(maxRadius));
+  let minRadiusSq = minRadius * minRadius;
+  let maxRadiusSq = maxRadius * maxRadius;
 
   let bufferOffset = (workgroupId.x % ACCUMULATION_BUFFERS) * totalCells;
 
-  for (var dRow = -iRadius; dRow <= iRadius; dRow++) {
-    for (var dCol = -iRadius; dCol <= iRadius; dCol++) {
-      let colB   = ((colA + dCol) % i32(params.gridSize) + i32(params.gridSize)) % i32(params.gridSize);
-      let rowB   = ((rowA + dRow) % i32(params.gridSize) + i32(params.gridSize)) % i32(params.gridSize);
-      let indexB = u32(rowB) * params.gridSize + u32(colB);
+  for (var dRow = -iMaxRadius; dRow <= iMaxRadius; dRow++) {
+    let dRowSq = f32(dRow) * f32(dRow);
+    if (dRowSq > maxRadiusSq) { continue; }
 
-      if (indexB <= indexA) { continue; }
+    // Compute the col range for the annulus at this row.
+    // Left wing:  dCol ∈ [-iOuterCol, -iInnerCol]
+    // Right wing: dCol ∈ [max(iInnerCol,1), iOuterCol]  (start at 1 avoids dCol=0 double-count)
+    let iOuterCol = i32(sqrt(maxRadiusSq - dRowSq));
+    let iInnerCol = i32(ceil(sqrt(max(0.0, minRadiusSq - dRowSq))));
 
-      let posB     = vec2f(f32(colB), f32(rowB));
-      let pairDisp = periodicDisplacement(posA, posB, gSize);
-      if (dot(pairDisp, pairDisp) > radiusSq) { continue; }
+    for (var wing = 0; wing < 2; wing++) {
+      let dColStart = select(-iOuterCol, max(iInnerCol, 1), wing == 1);
+      let dColEnd   = select(-iInnerCol, iOuterCol,         wing == 1);
+      for (var dCol = dColStart; dCol <= dColEnd; dCol++) {
+        let colB   = ((colA + dCol) % i32(params.gridSize) + i32(params.gridSize)) % i32(params.gridSize);
+        let rowB   = ((rowA + dRow) % i32(params.gridSize) + i32(params.gridSize)) % i32(params.gridSize);
+        let indexB = u32(rowB) * params.gridSize + u32(colB);
 
-      let velB = textureLoad(velocityTexture, vec2i(colB, rowB), 0).xy;
+        if (indexB <= indexA) { continue; }
 
-      let center = computeInstantaneousRotationCenter(posA, velA, posB, velB, gSize);
-      if (center.x > 1e37) { continue; }
+        let posB     = vec2f(f32(colB), f32(rowB));
+        let pairDisp = periodicDisplacement(posA, posB, gSize);
+        let distSq   = dot(pairDisp, pairDisp);
+        // Guard against integer rounding at ring edges.
+        if (distSq > maxRadiusSq || distSq < minRadiusSq) { continue; }
 
-      let armB = periodicDisplacement(center, posB, gSize);
-      if (dot(armB, armB) < 0.01) { continue; }
+        let velB = textureLoad(velocityTexture, vec2i(colB, rowB), 0).xy;
 
-      let omega        = computeAngularVelocity(velA, center, posA, gSize);
-      let contribution = omega * params.accumulationScale / f32(totalCells);
+        let center = computeInstantaneousRotationCenter(posA, velA, posB, velB, gSize);
+        if (center.x > 1e37) { continue; }
 
-      let centerCol  = i32(center.x) % i32(params.gridSize);
-      let centerRow  = i32(center.y) % i32(params.gridSize);
-      let targetIndex = u32(centerRow) * params.gridSize + u32(centerCol);
+        let armB = periodicDisplacement(center, posB, gSize);
+        if (dot(armB, armB) < 0.01) { continue; }
 
-      atomicAddF32(bufferOffset + targetIndex, contribution);
+        let omega        = computeAngularVelocity(velA, center, posA, gSize);
+        let contribution = omega * params.accumulationScale / f32(totalCells);
+
+        let centerCol   = i32(center.x) % i32(params.gridSize);
+        let centerRow   = i32(center.y) % i32(params.gridSize);
+        let targetIndex = u32(centerRow) * params.gridSize + u32(centerCol);
+
+        atomicAddF32(bufferOffset + targetIndex, contribution);
+      }
     }
   }
 }

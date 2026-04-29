@@ -57,7 +57,7 @@ export class ControlPanel {
       () => 1 - PHYSICS_DEFAULTS.damping,
       v => { PHYSICS_DEFAULTS.damping = 1 - v; }
     );
-    this._addLinearSlider(container, 'Vorticity', 0, 2,
+    this._addLinearSlider(container, 'Vorticity', 0, 3,
       () => PHYSICS_DEFAULTS.vorticityStrength,
       v => { PHYSICS_DEFAULTS.vorticityStrength = v; }
     );

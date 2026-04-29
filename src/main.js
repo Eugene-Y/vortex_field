@@ -22,7 +22,7 @@ function computeFieldPixelSize() {
 }
 
 async function loadShaderSource(path) {
-  const response = await fetch(path);
+  const response = await fetch(path, { cache: 'reload' });
   if (!response.ok) throw new Error(`Failed to load shader: ${path}`);
   return response.text();
 }
