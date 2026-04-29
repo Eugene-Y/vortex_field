@@ -197,7 +197,7 @@ export class WebGPURotationField {
 
   _writeComputeParams() {
     // struct Params: gridSize(u32), accumulationScale(f32), parallelThreshold(f32),
-    //                pairRange(f32), _pad×4 — 32 bytes
+    //                pairRange(f32), sampleStride(u32), _pad×3 — 32 bytes
     const data = new ArrayBuffer(32);
     const u32  = new Uint32Array(data);
     const f32  = new Float32Array(data);
@@ -205,6 +205,7 @@ export class WebGPURotationField {
     f32[1] = ROTATION_FIELD.accumulationScale;
     f32[2] = ROTATION_FIELD.parallelThreshold;
     f32[3] = ROTATION_FIELD.pairRange;
+    u32[4] = ROTATION_FIELD.sampleStride;
     this._device.queue.writeBuffer(this._computeParamsBuffer, 0, data);
   }
 

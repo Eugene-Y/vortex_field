@@ -11,7 +11,7 @@ struct Params {
   accumulationScale: f32,
   parallelThreshold: f32,
   pairRange:         f32,
-  _pad0:             f32,
+  sampleStride:      u32,
   _pad1:             f32,
   _pad2:             f32,
   _pad3:             f32,
@@ -86,6 +86,7 @@ fn computeRotation(
   let posA   = vec2f(f32(colA), f32(rowA));
   let velA   = textureLoad(velocityTexture, vec2i(colA, rowA), 0).xy;
   if (length(velA) < 1e-6) { return; }
+  if (colA % i32(params.sampleStride) != 0 || rowA % i32(params.sampleStride) != 0) { return; }
 
   // Positive pairRange r: pairs within [0,   r·N/2]         — local-first.
   // Negative pairRange r: pairs within [(1+r)·N/2, N/2]     — distant-first.

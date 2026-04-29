@@ -243,7 +243,7 @@ async function main() {
   const gridSizeInput = document.getElementById('grid-size-input');
   gridSizeInput.value = GRID_SIZE;
   gridSizeInput.addEventListener('change', () => {
-    const value = Math.max(32, Math.min(512, parseInt(gridSizeInput.value, 10) || GRID_SIZE));
+    const value = Math.max(32, Math.min(1024, parseInt(gridSizeInput.value, 10) || GRID_SIZE));
     const params = new URLSearchParams(window.location.search);
     params.set('gridSize', value);
     window.location.search = params.toString();
