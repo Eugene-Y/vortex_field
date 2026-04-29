@@ -25,7 +25,7 @@ export class ControlPanel {
       () => ROTATION_FIELD.pairRange,
       v => { ROTATION_FIELD.pairRange = v; },
       'Positive: local rotation centers first. Negative: distant pairs first. Higher absolute value → more GPU load.',
-      1000
+      1000, 4
     );
     this._addSlider({
       container,
@@ -96,7 +96,7 @@ export class ControlPanel {
   // Linear slider. getValue/setValue work in the natural value space.
   // Power-curve slider symmetric around center (maps to mid of [min,max]).
   // Exponent > 1 gives finer control near center; exponent = 1 is linear.
-  _addSymmetricPowerSlider(container, label, min, max, exponent, getValue, setValue, hint = null, steps = 100) {
+  _addSymmetricPowerSlider(container, label, min, max, exponent, getValue, setValue, hint = null, steps = 100, decimals = 3) {
     const mid = (min + max) / 2;
     const halfRange = (max - min) / 2;
     const half = steps / 2;
@@ -109,7 +109,7 @@ export class ControlPanel {
       label,
       initialSliderValue,
       steps,
-      formatValue: sliderValue => fromSlider(sliderValue).toFixed(3),
+      formatValue: sliderValue => fromSlider(sliderValue).toFixed(decimals),
       onChange: sliderValue => setValue(fromSlider(sliderValue)),
       hint,
     });

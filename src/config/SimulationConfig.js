@@ -22,6 +22,11 @@ const DEFAULTS = {
 
 const VEL_TONE_BASE     = 30.0;
 const ROT_TONE_BASE     = 0.3;
+
+// Reference grid size at which accumulationScale=1 gives calibrated brightness.
+// Compensation multiplies scale by (gridSize / ref) × sampleStride² so brightness
+// stays constant regardless of grid size or stride.
+export const ROTATION_REFERENCE_GRID_SIZE = 100;
 export const VEL_LOG_RANGE = 3;
 export const ROT_LOG_RANGE = Math.log(ROT_TONE_BASE * Math.exp(3) * 200.0 / ROT_TONE_BASE); 
 

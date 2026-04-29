@@ -1,6 +1,6 @@
 'use strict';
 
-import { GRID_SIZE, ROTATION_FIELD, RENDER_DEFAULTS, COLORS } from '../config/SimulationConfig.js';
+import { GRID_SIZE, ROTATION_FIELD, ROTATION_REFERENCE_GRID_SIZE, RENDER_DEFAULTS, COLORS } from '../config/SimulationConfig.js';
 import { VelocityBridge } from '../gpu/VelocityBridge.js';
 
 const WORKGROUP_SIZE       = 64;
@@ -198,14 +198,23 @@ export class WebGPURotationField {
   _writeComputeParams() {
     // struct Params: gridSize(u32), accumulationScale(f32), parallelThreshold(f32),
     //                pairRange(f32), sampleStride(u32), _pad×3 — 32 bytes
+    //
+    // accumulationScale is compensated each frame:
+    //   × sampleStride²       — stride S reduces contributing pairs by S²
+    //   × gridSize / refGrid  — larger grids have longer arms → omega ∝ 1/N
+    const stride = ROTATION_FIELD.sampleStride;
+    const compensatedScale = ROTATION_FIELD.accumulationScale
+      * stride * stride
+      * (this._gridSize / ROTATION_REFERENCE_GRID_SIZE);
+
     const data = new ArrayBuffer(32);
     const u32  = new Uint32Array(data);
     const f32  = new Float32Array(data);
     u32[0] = this._gridSize;
-    f32[1] = ROTATION_FIELD.accumulationScale;
+    f32[1] = compensatedScale;
     f32[2] = ROTATION_FIELD.parallelThreshold;
     f32[3] = ROTATION_FIELD.pairRange;
-    u32[4] = ROTATION_FIELD.sampleStride;
+    u32[4] = stride;
     this._device.queue.writeBuffer(this._computeParamsBuffer, 0, data);
   }
 
