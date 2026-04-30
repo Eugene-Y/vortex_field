@@ -51,7 +51,7 @@ export class ControlPanel {
     );
     boundaryRow.querySelector('select').style.width = '70px';
     boundaryRow.appendChild(this._createGridSizeInput());
-    this._addLogSlider(container, 'Brush radius', 0.5, 20,
+    this._addLogSlider(container, 'Brush radius', 0.5, 256,
       () => MOUSE_DEFAULTS.impulseRadius,
       v => { MOUSE_DEFAULTS.impulseRadius = v; }
     );

@@ -1,6 +1,6 @@
 'use strict';
 
-import { ROTATION_FIELD, MOUSE_DEFAULTS, GRID_SIZE } from '../config/SimulationConfig.js';
+import { ROTATION_FIELD, MOUSE_DEFAULTS, GRID_SIZE, buildShareUrl } from '../config/SimulationConfig.js';
 
 const DRAG_MOVED_THRESHOLD_PX = 5;
 
@@ -93,9 +93,10 @@ export class FocusMaskInteractor {
   _onMouseUp(event) {
     if (!this._dragging) return;
     this._dragging = false;
-    // Quick click on the existing mask → clear it.
     if (this._startedOnMask && !this._dragMoved) {
       this._clearMask();
+    } else {
+      this._commitMaskToUrl();
     }
   }
 
@@ -108,9 +109,14 @@ export class FocusMaskInteractor {
     ROTATION_FIELD.maskRadius = MOUSE_DEFAULTS.impulseRadius;
   }
 
+  _commitMaskToUrl() {
+    history.replaceState(null, '', buildShareUrl());
+  }
+
   _clearMask() {
     ROTATION_FIELD.maskCenter = null;
     ROTATION_FIELD.maskRadius = null;
+    this._commitMaskToUrl();
     this._drawOverlay();
   }
 

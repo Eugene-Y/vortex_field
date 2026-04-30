@@ -65,8 +65,10 @@ export const ROTATION_FIELD = {
   accumulationScale: 1.0,
   pairRange:         _float('pairRange', DEFAULTS.pairRange),
   sampleStride:      _int('sampleStride', 1, 1, 32),
-  maskCenter:        null,  // [colF, rowF] in fractional grid-cell coords, or null
-  maskRadius:        null,  // grid cells; null → uses MOUSE_DEFAULTS.impulseRadius
+  maskCenter:        (_p.has('maskCx') && _p.has('maskCy'))
+    ? [_float('maskCx', 0), _float('maskCy', 0)]
+    : null,
+  maskRadius:        _p.has('maskR') ? _float('maskR', 2) : null,
 };
 
 const velBrightnessPos = _int('velBrightness', DEFAULTS.velBrightness, 0, 100);
@@ -103,6 +105,11 @@ export function buildShareUrl() {
     velBrightness: BRIGHTNESS_SLIDER_POSITIONS.velocity,
     rotBrightness: BRIGHTNESS_SLIDER_POSITIONS.rotation,
   });
+  if (ROTATION_FIELD.maskCenter) {
+    params.set('maskCx', ROTATION_FIELD.maskCenter[0].toPrecision(5));
+    params.set('maskCy', ROTATION_FIELD.maskCenter[1].toPrecision(5));
+    params.set('maskR',  ROTATION_FIELD.maskRadius.toPrecision(4));
+  }
   return `${window.location.origin}${window.location.pathname}?${params}`;
 }
 
