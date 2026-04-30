@@ -7,12 +7,13 @@ const _str   = (key, def) => _p.has(key) ? _p.get(key) : def;
 
 // All tuneable defaults live here. URL params override them on load.
 const DEFAULTS = {
-  gridSize:      256,
-  dampingLoss:   1e-7, // = 1 - damping; stored as loss for URL precision
-  simSpeed:      2.0,
-  brushRadius:   2.0,
-  brushStrength: 100.0,
-  patternScale:  0.7,
+  gridSize:          256,
+  dampingLoss:       1e-7, // = 1 - damping; stored as loss for URL precision
+  simSpeed:          2.0,
+  brushRadius:       2.0,
+  brushStrength:     100.0,
+  brushSpeed:        1.0,
+  patternScale:      0.7,
   pairRange:          0.04,
   pressureIterations: 40,
   vorticity:          0.0,
@@ -45,10 +46,14 @@ export const PHYSICS_DEFAULTS = {
   vorticityStrength:    _float('vorticity', 0.0),
 };
 
+// Pixels-per-second at which speedSensitivity=1 yields a 1× strength multiplier.
+export const MOUSE_SPEED_REFERENCE = 400;
+
 export const MOUSE_DEFAULTS = {
-  impulseRadius:   _float('brushRadius',   DEFAULTS.brushRadius),
-  impulseStrength: _float('brushStrength', DEFAULTS.brushStrength),
-  patternScale:    _float('patternScale',  DEFAULTS.patternScale),
+  impulseRadius:    _float('brushRadius',   DEFAULTS.brushRadius),
+  impulseStrength:  _float('brushStrength', DEFAULTS.brushStrength),
+  speedSensitivity: _float('brushSpeed',    DEFAULTS.brushSpeed),
+  patternScale:     _float('patternScale',  DEFAULTS.patternScale),
 };
 
 export const PATTERN_DEFAULTS = {
@@ -85,6 +90,7 @@ export function buildShareUrl() {
     simSpeed:      PHYSICS_DEFAULTS.simulationSpeed.toPrecision(3),
     brushRadius:   MOUSE_DEFAULTS.impulseRadius.toPrecision(3),
     brushStrength: MOUSE_DEFAULTS.impulseStrength.toPrecision(3),
+    brushSpeed:    MOUSE_DEFAULTS.speedSensitivity.toPrecision(3),
     patternScale:  MOUSE_DEFAULTS.patternScale.toPrecision(3),
     pairRange:     ROTATION_FIELD.pairRange.toPrecision(3),
     sampleStride:  ROTATION_FIELD.sampleStride,

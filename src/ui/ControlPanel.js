@@ -1,6 +1,6 @@
 'use strict';
 
-import { RENDER_DEFAULTS, BRIGHTNESS_SLIDER_POSITIONS, PHYSICS_DEFAULTS, MOUSE_DEFAULTS, ROTATION_FIELD, VEL_LOG_RANGE, ROT_LOG_RANGE } from '../config/SimulationConfig.js';
+import { RENDER_DEFAULTS, BRIGHTNESS_SLIDER_POSITIONS, PHYSICS_DEFAULTS, MOUSE_DEFAULTS, ROTATION_FIELD, VEL_LOG_RANGE, ROT_LOG_RANGE, MOUSE_SPEED_REFERENCE } from '../config/SimulationConfig.js';
 
 const VEL_TONE_BASE = 30.0;
 const ROT_TONE_BASE = 0.3;
@@ -55,6 +55,10 @@ export class ControlPanel {
     this._addLogSlider(container, 'Brush strength', 1, 500,
       () => MOUSE_DEFAULTS.impulseStrength,
       v => { MOUSE_DEFAULTS.impulseStrength = v; }
+    );
+    this._addLinearSlider(container, 'Speed sensitivity', 0, 1,
+      () => MOUSE_DEFAULTS.speedSensitivity,
+      v => { MOUSE_DEFAULTS.speedSensitivity = v; }
     );
     this._addLogSlider(container, 'dt', 0.0001, 10.0,
       () => PHYSICS_DEFAULTS.simulationSpeed,

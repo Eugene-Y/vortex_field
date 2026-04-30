@@ -1,6 +1,6 @@
 'use strict';
 
-import { MOUSE_DEFAULTS, GRID_SIZE } from '../config/SimulationConfig.js';
+import { MOUSE_DEFAULTS, MOUSE_SPEED_REFERENCE, GRID_SIZE } from '../config/SimulationConfig.js';
 
 const INJECTION_STEP_FRACTION = 0.75; // same coverage rule as PatternInjector
 
@@ -20,9 +20,10 @@ export class MouseInjector {
     this._canvas    = canvas;
     this._fluidField = fluidField;
     this._fieldSize  = fieldSize;
-    this._pressedInField   = false; // true only when mousedown originated on Field A
-    this._previousPosition = null;
-    this._pendingStroke    = null; // { from, to, direction }
+    this._pressedInField    = false; // true only when mousedown originated on Field A
+    this._previousPosition  = null;
+    this._previousEventTime = null;
+    this._pendingStroke     = null; // { from, to, direction, speedFactor }
 
     this._onMouseDown = this._onMouseDown.bind(this);
     this._onMouseMove = this._onMouseMove.bind(this);
@@ -35,9 +36,9 @@ export class MouseInjector {
 
   applyPendingInjection(quadVao) {
     if (!this._pendingStroke) return;
-    const { from, to, direction } = this._pendingStroke;
+    const { from, to, direction, speedFactor } = this._pendingStroke;
     this._pendingStroke = null;
-    this._injectStroke(from, to, direction, quadVao);
+    this._injectStroke(from, to, direction, speedFactor, quadVao);
   }
 
   dispose() {
@@ -46,13 +47,16 @@ export class MouseInjector {
     window.removeEventListener('mouseup', this._onMouseUp);
   }
 
-  _injectStroke(from, to, direction, quadVao) {
+  _injectStroke(from, to, direction, speedFactor, quadVao) {
     const dx = to[0] - from[0];
     const dy = to[1] - from[1];
     const lengthUv = Math.hypot(dx, dy);
 
-    const stepUv   = (MOUSE_DEFAULTS.impulseRadius * INJECTION_STEP_FRACTION) / GRID_SIZE;
-    const steps    = Math.max(1, Math.ceil(lengthUv / stepUv));
+    const sensitivity = MOUSE_DEFAULTS.speedSensitivity;
+    const strength = MOUSE_DEFAULTS.impulseStrength * (1 - sensitivity + sensitivity * speedFactor);
+
+    const stepUv = (MOUSE_DEFAULTS.impulseRadius * INJECTION_STEP_FRACTION) / GRID_SIZE;
+    const steps  = Math.max(1, Math.ceil(lengthUv / stepUv));
 
     for (let i = 0; i < steps; i++) {
       const t = steps === 1 ? 0 : i / (steps - 1);
@@ -60,7 +64,7 @@ export class MouseInjector {
       this._fluidField.injectImpulse(
         position, direction,
         MOUSE_DEFAULTS.impulseRadius,
-        MOUSE_DEFAULTS.impulseStrength,
+        strength,
         quadVao,
       );
     }
@@ -69,8 +73,9 @@ export class MouseInjector {
   _onMouseDown(event) {
     const position = this._normalizeToFieldUv(event);
     if (!position) return;
-    this._pressedInField   = true;
-    this._previousPosition = position;
+    this._pressedInField    = true;
+    this._previousPosition  = position;
+    this._previousEventTime = event.timeStamp;
   }
 
   _onMouseMove(event) {
@@ -81,12 +86,14 @@ export class MouseInjector {
     if (!currentPosition) {
       // Mouse left Field A — forget previous position so re-entry doesn't
       // create a phantom stroke spanning the gap.
-      this._previousPosition = null;
+      this._previousPosition  = null;
+      this._previousEventTime = null;
       return;
     }
 
     if (!this._previousPosition) {
-      this._previousPosition = currentPosition;
+      this._previousPosition  = currentPosition;
+      this._previousEventTime = event.timeStamp;
       return;
     }
 
@@ -95,19 +102,27 @@ export class MouseInjector {
     const speed = Math.hypot(dx, dy);
 
     if (speed > 0) {
+      const pixelDelta      = speed * this._fieldSize;
+      const deltaSeconds    = Math.max(0.001, (event.timeStamp - this._previousEventTime) / 1000);
+      const pixelsPerSecond = pixelDelta / deltaSeconds;
+      const speedFactor     = pixelsPerSecond / MOUSE_SPEED_REFERENCE;
+
       this._pendingStroke = {
-        from:      this._previousPosition,
-        to:        currentPosition,
-        direction: [dx / speed, dy / speed],
+        from:        this._previousPosition,
+        to:          currentPosition,
+        direction:   [dx / speed, dy / speed],
+        speedFactor,
       };
     }
 
-    this._previousPosition = currentPosition;
+    this._previousPosition  = currentPosition;
+    this._previousEventTime = event.timeStamp;
   }
 
   _onMouseUp() {
-    this._pressedInField   = false;
-    this._previousPosition = null;
+    this._pressedInField    = false;
+    this._previousPosition  = null;
+    this._previousEventTime = null;
   }
 
   _normalizeToFieldUv(event) {
