@@ -3,19 +3,28 @@
 // Each thread handles one cell i and iterates over all cells j within
 // pairRange radius where j > i (unique pairs only, no double-counting).
 //
+// When useMask=1, threads cover only the bounding box of a focus circle
+// (maskBoxSize² threads instead of gridSize²) and both cells must be
+// within the circle. This gives O(R²) dispatch vs O(N²) for a circle
+// of radius R, without any dead work beyond the mask-rejection check.
+//
 // Accumulation uses a CAS-based f32 atomic add (bit-cast through i32).
 // K private buffers (selected by workgroup_id % K) reduce CAS contention K-fold.
 
 struct Params {
-  gridSize:          u32,
-  accumulationScale: f32,
-  parallelThreshold: f32,
-  pairRange:         f32,
-  sampleStride:      u32,
-  _pad1:             f32,
-  _pad2:             f32,
-  _pad3:             f32,
-}
+  gridSize:          u32,   // 0
+  accumulationScale: f32,   // 4
+  parallelThreshold: f32,   // 8
+  pairRange:         f32,   // 12
+  sampleStride:      u32,   // 16
+  maskOriginX:       u32,   // 20
+  maskOriginY:       u32,   // 24
+  maskBoxSize:       u32,   // 28
+  maskCenterX:       f32,   // 32
+  maskCenterY:       f32,   // 36
+  maskRadiusSq:      f32,   // 40
+  useMask:           u32,   // 44
+}                            // 48 bytes
 
 @group(0) @binding(0) var velocityTexture: texture_2d<f32>;
 @group(0) @binding(1) var<storage, read_write> rotationBuffer: array<atomic<i32>>;
@@ -71,18 +80,39 @@ fn computeAngularVelocity(velA: vec2f, center: vec2f, posA: vec2f, gridSize: f32
   return cross / armLengthSquared;
 }
 
+fn insideMaskCircle(col: i32, row: i32) -> bool {
+  let dc = f32(col) - params.maskCenterX;
+  let dr = f32(row) - params.maskCenterY;
+  return dc * dc + dr * dr <= params.maskRadiusSq;
+}
+
 @compute @workgroup_size(64)
 fn computeRotation(
   @builtin(global_invocation_id) globalId:    vec3<u32>,
   @builtin(workgroup_id)         workgroupId: vec3<u32>,
 ) {
-  let indexA     = globalId.x;
   let totalCells = params.gridSize * params.gridSize;
-  if (indexA >= totalCells) { return; }
 
+  var colA: i32;
+  var rowA: i32;
+
+  if (params.useMask == 1u) {
+    // Threads cover the mask bounding box only: O(R²) instead of O(N²).
+    let boxSize = params.maskBoxSize;
+    let flatIdx = globalId.x;
+    if (flatIdx >= boxSize * boxSize) { return; }
+    colA = i32(params.maskOriginX) + i32(flatIdx % boxSize);
+    rowA = i32(params.maskOriginY) + i32(flatIdx / boxSize);
+    if (!insideMaskCircle(colA, rowA)) { return; }
+  } else {
+    let indexA = globalId.x;
+    if (indexA >= totalCells) { return; }
+    colA = i32(indexA % params.gridSize);
+    rowA = i32(indexA / params.gridSize);
+  }
+
+  let indexA = u32(rowA) * params.gridSize + u32(colA);
   let gSize  = f32(params.gridSize);
-  let colA   = i32(indexA % params.gridSize);
-  let rowA   = i32(indexA / params.gridSize);
   let posA   = vec2f(f32(colA), f32(rowA));
   let velA   = textureLoad(velocityTexture, vec2i(colA, rowA), 0).xy;
   if (length(velA) < 1e-6) { return; }
@@ -104,9 +134,6 @@ fn computeRotation(
     let dRowSq = f32(dRow) * f32(dRow);
     if (dRowSq > maxRadiusSq) { continue; }
 
-    // Compute the col range for the annulus at this row.
-    // Left wing:  dCol ∈ [-iOuterCol, -iInnerCol]
-    // Right wing: dCol ∈ [max(iInnerCol,1), iOuterCol]  (start at 1 avoids dCol=0 double-count)
     let iOuterCol = i32(sqrt(maxRadiusSq - dRowSq));
     let iInnerCol = i32(ceil(sqrt(max(0.0, minRadiusSq - dRowSq))));
 
@@ -120,10 +147,12 @@ fn computeRotation(
 
         if (indexB <= indexA) { continue; }
 
+        // When mask is active, discard pairs where cell B is outside the circle.
+        if (params.useMask == 1u && !insideMaskCircle(colB, rowB)) { continue; }
+
         let posB     = vec2f(f32(colB), f32(rowB));
         let pairDisp = periodicDisplacement(posA, posB, gSize);
         let distSq   = dot(pairDisp, pairDisp);
-        // Guard against integer rounding at ring edges.
         if (distSq > maxRadiusSq || distSq < minRadiusSq) { continue; }
 
         let velB = textureLoad(velocityTexture, vec2i(colB, rowB), 0).xy;

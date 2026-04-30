@@ -65,6 +65,8 @@ export const ROTATION_FIELD = {
   accumulationScale: 1.0,
   pairRange:         _float('pairRange', DEFAULTS.pairRange),
   sampleStride:      _int('sampleStride', 1, 1, 32),
+  maskCenter:        null,  // [colF, rowF] in fractional grid-cell coords, or null
+  maskRadius:        null,  // grid cells; null → uses MOUSE_DEFAULTS.impulseRadius
 };
 
 const velBrightnessPos = _int('velBrightness', DEFAULTS.velBrightness, 0, 100);

@@ -48,7 +48,7 @@ export class WebGPURotationField {
     });
 
     this._computeParamsBuffer = device.createBuffer({
-      size:  32,
+      size:  48,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -96,7 +96,7 @@ export class WebGPURotationField {
     const computePass = encoder.beginComputePass();
     computePass.setPipeline(this._computePipeline);
     computePass.setBindGroup(0, this._computeBindGroup);
-    computePass.dispatchWorkgroups(Math.ceil(totalCells / WORKGROUP_SIZE));
+    computePass.dispatchWorkgroups(Math.ceil(this._computeThreadCount() / WORKGROUP_SIZE));
     computePass.end();
 
     // Reduce pass: sum K buffers → output buffer.
@@ -195,26 +195,58 @@ export class WebGPURotationField {
     });
   }
 
+  // Returns the number of compute threads to dispatch this frame.
+  // When mask is active, dispatches only the bounding-box cells (O(R²) vs O(N²)).
+  _computeThreadCount() {
+    const mask = this._resolveMaskBox();
+    return mask.active ? mask.boxSize * mask.boxSize : this._gridSize * this._gridSize;
+  }
+
+  // Returns the mask bounding box in grid-cell space, clamped to the grid.
+  // maskRadius is MOUSE_DEFAULTS.impulseRadius (grid cells).
+  _resolveMaskBox() {
+    const center = ROTATION_FIELD.maskCenter;
+    if (!center) return { active: false };
+
+    const r       = ROTATION_FIELD.maskRadius;
+    const boxSize = Math.min(this._gridSize, Math.ceil(2 * r + 2));
+    const halfBox = Math.floor(boxSize / 2);
+    const originX = Math.max(0, Math.min(this._gridSize - boxSize, Math.round(center[0]) - halfBox));
+    const originY = Math.max(0, Math.min(this._gridSize - boxSize, Math.round(center[1]) - halfBox));
+    return { active: true, originX, originY, boxSize, centerX: center[0], centerY: center[1], radiusSq: r * r };
+  }
+
   _writeComputeParams() {
-    // struct Params: gridSize(u32), accumulationScale(f32), parallelThreshold(f32),
-    //                pairRange(f32), sampleStride(u32), _pad×3 — 32 bytes
+    // struct Params: 48 bytes (12 × f32/u32)
+    //   gridSize, accumulationScale, parallelThreshold, pairRange,
+    //   sampleStride, maskOriginX, maskOriginY, maskBoxSize,
+    //   maskCenterX, maskCenterY, maskRadiusSq, useMask
     //
-    // accumulationScale is compensated each frame:
-    //   × sampleStride²       — stride S reduces contributing pairs by S²
-    //   × gridSize / refGrid  — larger grids have longer arms → omega ∝ 1/N
+    // accumulationScale compensated each frame:
+    //   × sampleStride²      — stride S reduces contributing pairs by S²
+    //   × gridSize / refGrid — larger grids have longer arms → omega ∝ 1/N
     const stride = ROTATION_FIELD.sampleStride;
     const compensatedScale = ROTATION_FIELD.accumulationScale
       * stride * stride
       * (this._gridSize / ROTATION_REFERENCE_GRID_SIZE);
 
-    const data = new ArrayBuffer(32);
+    const mask = this._resolveMaskBox();
+
+    const data = new ArrayBuffer(48);
     const u32  = new Uint32Array(data);
     const f32  = new Float32Array(data);
-    u32[0] = this._gridSize;
-    f32[1] = compensatedScale;
-    f32[2] = ROTATION_FIELD.parallelThreshold;
-    f32[3] = ROTATION_FIELD.pairRange;
-    u32[4] = stride;
+    u32[0]  = this._gridSize;
+    f32[1]  = compensatedScale;
+    f32[2]  = ROTATION_FIELD.parallelThreshold;
+    f32[3]  = ROTATION_FIELD.pairRange;
+    u32[4]  = stride;
+    u32[5]  = mask.active ? mask.originX  : 0;
+    u32[6]  = mask.active ? mask.originY  : 0;
+    u32[7]  = mask.active ? mask.boxSize  : 0;
+    f32[8]  = mask.active ? mask.centerX  : 0;
+    f32[9]  = mask.active ? mask.centerY  : 0;
+    f32[10] = mask.active ? mask.radiusSq : 0;
+    u32[11] = mask.active ? 1 : 0;
     this._device.queue.writeBuffer(this._computeParamsBuffer, 0, data);
   }
 

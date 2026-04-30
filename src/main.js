@@ -8,6 +8,7 @@ import { FieldRenderer }           from './rendering/FieldRenderer.js';
 import { MouseInjector }           from './interaction/MouseInjector.js';
 import { ControlPanel }            from './ui/ControlPanel.js';
 import { PatternInjector }         from './interaction/PatternInjector.js';
+import { FocusMaskInteractor }     from './interaction/FocusMaskInteractor.js';
 import { GRID_SIZE, DISPLAY_SCALE, DISPLAY_GAP, PHYSICS_DEFAULTS, buildShareUrl } from './config/SimulationConfig.js';
 
 const CANVAS_FIELD_SIZE = computeFieldPixelSize();
@@ -163,6 +164,7 @@ async function main() {
     canvasMain, fluidField, CANVAS_FIELD_SIZE, DISPLAY_GAP,
     rotationControls, canvasRotation,
   );
+  const focusMask = new FocusMaskInteractor(canvasRotation, canvasMain);
 
   controlPanel.addRotationSliders(rotationControls);
   patternInjector.queueInitialInjection([0.5, 0.5]);
@@ -179,6 +181,8 @@ async function main() {
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
     renderer.renderVelocityField(fluidField.velocityTexture, quadVao);
+
+    focusMask.updateOverlay();
   }
 
   function renderFrame(currentTime) {
