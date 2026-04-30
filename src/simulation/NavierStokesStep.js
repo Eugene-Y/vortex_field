@@ -166,7 +166,7 @@ export class NavierStokesStep {
     this._advectProgram.setUniform1i('u_velocity', 0);
     this._advectProgram.setUniform1f('u_deltaTime', deltaTime);
     this._advectProgram.setUniform1f('u_gridSize', GRID_SIZE);
-    this._advectProgram.setUniform1f('u_damping', PHYSICS_DEFAULTS.damping);
+    this._advectProgram.setUniform1f('u_damping', Math.pow(PHYSICS_DEFAULTS.damping, deltaTime));
     this._advectProgram.setUniform1i('u_boundary', PHYSICS_DEFAULTS.boundaryMode);
 
     gl.activeTexture(gl.TEXTURE0);
