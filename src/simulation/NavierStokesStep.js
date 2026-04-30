@@ -35,7 +35,6 @@ export class NavierStokesStep {
     );
 
     this._advectProgram               = new ShaderProgram(gl, shaderSources.vert, shaderSources.advect);
-    this._diffuseProgram              = new ShaderProgram(gl, shaderSources.vert, shaderSources.diffuse);
     this._divergenceProgram           = new ShaderProgram(gl, shaderSources.vert, shaderSources.divergence);
     this._pressureProgram             = new ShaderProgram(gl, shaderSources.vert, shaderSources.pressure);
     this._subtractGradProgram         = new ShaderProgram(gl, shaderSources.vert, shaderSources.subtractGradient);
@@ -56,7 +55,6 @@ export class NavierStokesStep {
 
   step(deltaTime, quadVao) {
     this._advect(deltaTime, quadVao);
-    this._diffuse(deltaTime, quadVao);
     if (PHYSICS_DEFAULTS.vorticityStrength > 0) {
       this._applyVorticityConfinement(deltaTime, quadVao);
     }
@@ -145,7 +143,6 @@ export class NavierStokesStep {
     this._divergence.dispose();
     this._curl.dispose();
     this._advectProgram.dispose();
-    this._diffuseProgram.dispose();
     this._divergenceProgram.dispose();
     this._pressureProgram.dispose();
     this._subtractGradProgram.dispose();
@@ -174,34 +171,6 @@ export class NavierStokesStep {
 
     drawFullScreenQuad(gl, quadVao);
     this._velocity.swap();
-  }
-
-  _diffuse(deltaTime, quadVao) {
-    const gl = this._gl;
-    const alpha = (TEXEL_SIZE * TEXEL_SIZE) / (PHYSICS_DEFAULTS.viscosity * deltaTime);
-    const beta = 1.0 / (4.0 + alpha);
-    const prevTexture = this._velocity.readTexture;
-
-    for (let iteration = 0; iteration < PHYSICS_DEFAULTS.diffusionIterations; iteration++) {
-      gl.bindFramebuffer(gl.FRAMEBUFFER, this._velocity.writeFramebuffer);
-      gl.viewport(0, 0, GRID_SIZE, GRID_SIZE);
-
-      this._diffuseProgram.bind();
-      this._diffuseProgram.setUniform1i('u_velocity', 0);
-      this._diffuseProgram.setUniform1i('u_velocityPrev', 1);
-      this._diffuseProgram.setUniform1f('u_alpha', alpha);
-      this._diffuseProgram.setUniform1f('u_beta', beta);
-      this._diffuseProgram.setUniform1f('u_texelSize', TEXEL_SIZE);
-      this._diffuseProgram.setUniform1i('u_boundary', PHYSICS_DEFAULTS.boundaryMode);
-
-      gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, this._velocity.readTexture);
-      gl.activeTexture(gl.TEXTURE1);
-      gl.bindTexture(gl.TEXTURE_2D, prevTexture);
-
-      drawFullScreenQuad(gl, quadVao);
-      this._velocity.swap();
-    }
   }
 
   _applyVorticityConfinement(deltaTime, quadVao) {
