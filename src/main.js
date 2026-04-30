@@ -182,7 +182,7 @@ async function main() {
   }
 
   function renderFrame(currentTime) {
-    const baseDeltaTime = Math.min((currentTime - previousTime) / 1000, 0.05);
+    const baseDeltaTime = Math.min((currentTime - previousTime) / 1000, 0.033);
     const deltaTime     = baseDeltaTime * PHYSICS_DEFAULTS.simulationSpeed;
     previousTime = currentTime;
 
