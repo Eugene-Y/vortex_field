@@ -18,6 +18,10 @@ export class FluidField {
     return this._physicsStep.velocityTexture;
   }
 
+  get velocityFramebuffer() {
+    return this._physicsStep.velocityFramebuffer;
+  }
+
   step(deltaTime, quadVao) {
     this._physicsStep.step(deltaTime, quadVao);
   }

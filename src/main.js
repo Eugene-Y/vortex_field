@@ -1,18 +1,19 @@
 'use strict';
 
-import { createGlContext }  from './gl/GlContext.js';
-import { FluidField }       from './simulation/FluidField.js';
-import { RotationField }    from './simulation/RotationField.js';
-import { FieldRenderer }    from './rendering/FieldRenderer.js';
-import { MouseInjector }    from './interaction/MouseInjector.js';
-import { ControlPanel }     from './ui/ControlPanel.js';
-import { PatternInjector }  from './interaction/PatternInjector.js';
+import { createGlContext }         from './gl/GlContext.js';
+import { createWebGPUDevice }      from './gpu/WebGPUDevice.js';
+import { FluidField }              from './simulation/FluidField.js';
+import { WebGPURotationField }     from './simulation/WebGPURotationField.js';
+import { FieldRenderer }           from './rendering/FieldRenderer.js';
+import { MouseInjector }           from './interaction/MouseInjector.js';
+import { ControlPanel }            from './ui/ControlPanel.js';
+import { PatternInjector }         from './interaction/PatternInjector.js';
 import { GRID_SIZE, DISPLAY_SCALE, DISPLAY_GAP, PHYSICS_DEFAULTS, buildShareUrl } from './config/SimulationConfig.js';
 
 const CANVAS_FIELD_SIZE = computeFieldPixelSize();
 
 function computeFieldPixelSize() {
-  const reservedVertical   = 180; // labels + sliders + margins
+  const reservedVertical   = 180;
   const reservedHorizontal = 48;
   const maxFromWidth  = Math.floor((window.innerWidth  - reservedHorizontal - DISPLAY_GAP) / 2 / GRID_SIZE);
   const maxFromHeight = Math.floor((window.innerHeight - reservedVertical) / GRID_SIZE);
@@ -21,7 +22,7 @@ function computeFieldPixelSize() {
 }
 
 async function loadShaderSource(path) {
-  const response = await fetch(path);
+  const response = await fetch(path, { cache: 'reload' });
   if (!response.ok) throw new Error(`Failed to load shader: ${path}`);
   return response.text();
 }
@@ -39,9 +40,10 @@ async function loadAllShaders() {
     vorticityCurlFrag,
     vorticityConfinementFrag,
     injectDiskFrag,
-    rotationAccumulateVert,
-    rotationAccumulateFrag,
     renderFrag,
+    rotationComputeWgsl,
+    rotationReduceWgsl,
+    rotationRenderWgsl,
   ] = await Promise.all([
     loadShaderSource('src/shaders/common.vert'),
     loadShaderSource('src/shaders/advect.frag'),
@@ -54,9 +56,10 @@ async function loadAllShaders() {
     loadShaderSource('src/shaders/vorticity_curl.frag'),
     loadShaderSource('src/shaders/vorticity_confinement.frag'),
     loadShaderSource('src/shaders/inject_disk.frag'),
-    loadShaderSource('src/shaders/rotation_accumulate.vert'),
-    loadShaderSource('src/shaders/rotation_accumulate.frag'),
     loadShaderSource('src/shaders/render.frag'),
+    loadShaderSource('src/shaders/rotation_compute.wgsl'),
+    loadShaderSource('src/shaders/rotation_reduce.wgsl'),
+    loadShaderSource('src/shaders/rotation_render.wgsl'),
   ]);
 
   return {
@@ -73,22 +76,22 @@ async function loadAllShaders() {
       vorticityConfinement:   vorticityConfinementFrag,
       injectDisk:             injectDiskFrag,
     },
-    rotation: {
-      vert: rotationAccumulateVert,
-      frag: rotationAccumulateFrag,
-    },
     render: {
       vert: commonVert,
       frag: renderFrag,
+    },
+    rotation: {
+      compute: rotationComputeWgsl,
+      reduce:  rotationReduceWgsl,
+      render:  rotationRenderWgsl,
     },
   };
 }
 
 function configureCanvas(canvas) {
-  // Two fields side by side with a gap — single GL context, no cross-context texture sharing.
-  canvas.width  = CANVAS_FIELD_SIZE * 2 + DISPLAY_GAP;
+  canvas.width  = CANVAS_FIELD_SIZE;
   canvas.height = CANVAS_FIELD_SIZE;
-  canvas.style.width  = `${CANVAS_FIELD_SIZE * 2 + DISPLAY_GAP}px`;
+  canvas.style.width  = `${CANVAS_FIELD_SIZE}px`;
   canvas.style.height = `${CANVAS_FIELD_SIZE}px`;
 }
 
@@ -105,19 +108,46 @@ function createFullScreenQuadVao(gl) {
   return vao;
 }
 
+function showWebGPUError(message) {
+  const fields = document.getElementById('fields');
+  const errorBox = document.createElement('div');
+  errorBox.style.cssText = 'color:#f55;font-size:13px;padding:20px;max-width:500px;text-align:center;line-height:1.6';
+  errorBox.textContent = `WebGPU unavailable: ${message}`;
+  fields.replaceWith(errorBox);
+}
 
 async function main() {
-  const canvas = document.getElementById('canvas-main');
-  configureCanvas(canvas);
+  const canvasMain     = document.getElementById('canvas-main');
+  const canvasRotation = document.getElementById('canvas-rotation');
 
-  const gl = createGlContext(canvas);
+  configureCanvas(canvasMain);
+  configureCanvas(canvasRotation);
+
+  // Set the gap between the two field wrappers to match DISPLAY_GAP.
+  document.getElementById('fields').style.gap = `${DISPLAY_GAP}px`;
+
+  let gpuDevice;
+  try {
+    gpuDevice = await createWebGPUDevice();
+  } catch (error) {
+    showWebGPUError(error.message);
+    return;
+  }
+
+  const gl      = createGlContext(canvasMain);
   const shaders = await loadAllShaders();
 
   const fluidField    = new FluidField(gl, shaders.physics);
-  const rotationField = new RotationField(gl, shaders.rotation.vert, shaders.rotation.frag);
-  const renderer      = new FieldRenderer(gl, shaders.render.vert, shaders.render.frag);
-  const quadVao       = createFullScreenQuadVao(gl);
-  const mouseInjector    = new MouseInjector(canvas, fluidField, CANVAS_FIELD_SIZE);
+  const rotationField = new WebGPURotationField(
+    gpuDevice, gl, canvasRotation,
+    shaders.rotation.compute,
+    shaders.rotation.reduce,
+    shaders.rotation.render,
+  );
+  const renderer   = new FieldRenderer(gl, shaders.render.vert, shaders.render.frag);
+  const quadVao    = createFullScreenQuadVao(gl);
+
+  const mouseInjector    = new MouseInjector(canvasMain, fluidField, CANVAS_FIELD_SIZE);
   const velocityControls = document.getElementById('controls-velocity');
   const rotationControls = document.getElementById('controls-rotation');
 
@@ -130,35 +160,30 @@ async function main() {
   );
 
   const patternInjector = new PatternInjector(
-    canvas, fluidField, CANVAS_FIELD_SIZE, DISPLAY_GAP,
-    rotationControls,
+    canvasMain, fluidField, CANVAS_FIELD_SIZE, DISPLAY_GAP,
+    rotationControls, canvasRotation,
   );
 
   controlPanel.addRotationSliders(rotationControls);
-
   patternInjector.queueInitialInjection([0.5, 0.5]);
 
-  let previousTime = performance.now();
+  let previousTime    = performance.now();
   let animationFrameId = null;
-  let paused = false;
+  let paused          = false;
 
   function renderFields() {
-    rotationField.recomputeFrom(fluidField.velocityTexture);
+    rotationField.recomputeFrom(fluidField.velocityTexture, fluidField.velocityFramebuffer);
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, CANVAS_FIELD_SIZE, CANVAS_FIELD_SIZE);
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
-
-    gl.viewport(0, 0, CANVAS_FIELD_SIZE, CANVAS_FIELD_SIZE);
     renderer.renderVelocityField(fluidField.velocityTexture, quadVao);
-
-    gl.viewport(CANVAS_FIELD_SIZE + DISPLAY_GAP, 0, CANVAS_FIELD_SIZE, CANVAS_FIELD_SIZE);
-    renderer.renderRotationField(rotationField.rotationTexture, quadVao);
   }
 
   function renderFrame(currentTime) {
     const baseDeltaTime = Math.min((currentTime - previousTime) / 1000, 0.05);
-    const deltaTime = baseDeltaTime * PHYSICS_DEFAULTS.simulationSpeed;
+    const deltaTime     = baseDeltaTime * PHYSICS_DEFAULTS.simulationSpeed;
     previousTime = currentTime;
 
     mouseInjector.applyPendingInjection(quadVao);
@@ -176,7 +201,7 @@ async function main() {
   }
 
   function startLoop() {
-    previousTime = performance.now();
+    previousTime     = performance.now();
     animationFrameId = requestAnimationFrame(renderFrame);
   }
 
@@ -218,7 +243,7 @@ async function main() {
   const gridSizeInput = document.getElementById('grid-size-input');
   gridSizeInput.value = GRID_SIZE;
   gridSizeInput.addEventListener('change', () => {
-    const value = Math.max(32, Math.min(512, parseInt(gridSizeInput.value, 10) || GRID_SIZE));
+    const value = Math.max(32, Math.min(1024, parseInt(gridSizeInput.value, 10) || GRID_SIZE));
     const params = new URLSearchParams(window.location.search);
     params.set('gridSize', value);
     window.location.search = params.toString();

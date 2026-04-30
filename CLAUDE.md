@@ -341,6 +341,7 @@ violated and the field becomes chaotic. This is a fundamental limit of the schem
 ## TODOs
 - export animation
 - reaction-diffusion
+- интенсивность кисти не точечная а зависит от скорости мыши
 - пресеты
 - temperature field / buoyancy (Boussinesq)
 - BFECC advection for lower numerical diffusion

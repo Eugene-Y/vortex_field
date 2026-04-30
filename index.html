@@ -209,16 +209,15 @@
     <a href="https://github.com/Eugene-Y/vortex_field" target="_blank" id="gh-repo-link">GitHub</a>
   </div>
   <div id="fields">
-    <div id="canvas-container">
+    <div class="field-wrapper">
       <canvas id="canvas-main"></canvas>
-      <div id="labels">
-        <span class="field-label">Field A — Velocity</span>
-        <span class="field-label">Field B — Rotation Centers</span>
-      </div>
-      <div id="field-controls">
-        <div id="controls-velocity"></div>
-        <div id="controls-rotation"></div>
-      </div>
+      <span class="field-label">Field A — Velocity</span>
+      <div id="controls-velocity"></div>
+    </div>
+    <div class="field-wrapper">
+      <canvas id="canvas-rotation"></canvas>
+      <span class="field-label">Field B — Rotation Centers</span>
+      <div id="controls-rotation"></div>
     </div>
   </div>
 

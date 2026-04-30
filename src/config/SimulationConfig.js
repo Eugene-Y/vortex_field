@@ -22,10 +22,15 @@ const DEFAULTS = {
 
 const VEL_TONE_BASE     = 30.0;
 const ROT_TONE_BASE     = 0.3;
+
+// Reference grid size at which accumulationScale=1 gives calibrated brightness.
+// Compensation multiplies scale by (gridSize / ref) × sampleStride² so brightness
+// stays constant regardless of grid size or stride.
+export const ROTATION_REFERENCE_GRID_SIZE = 100;
 export const VEL_LOG_RANGE = 3;
 export const ROT_LOG_RANGE = Math.log(ROT_TONE_BASE * Math.exp(3) * 200.0 / ROT_TONE_BASE); 
 
-export const GRID_SIZE = _int('gridSize', DEFAULTS.gridSize, 32, 512);
+export const GRID_SIZE = _int('gridSize', DEFAULTS.gridSize, 32, 1024);
 
 export const DISPLAY_SCALE = 7; // pixels per grid cell
 export const DISPLAY_GAP = 32; // pixel gap between the two fields
@@ -54,6 +59,7 @@ export const ROTATION_FIELD = {
   parallelThreshold: 0.001,
   accumulationScale: 1.0,
   pairRange:         _float('pairRange', DEFAULTS.pairRange),
+  sampleStride:      _int('sampleStride', 1, 1, 32),
 };
 
 const velBrightnessPos = _int('velBrightness', DEFAULTS.velBrightness, 0, 100);
@@ -81,6 +87,7 @@ export function buildShareUrl() {
     brushStrength: MOUSE_DEFAULTS.impulseStrength.toPrecision(3),
     patternScale:  MOUSE_DEFAULTS.patternScale.toPrecision(3),
     pairRange:     ROTATION_FIELD.pairRange.toPrecision(3),
+    sampleStride:  ROTATION_FIELD.sampleStride,
     boundary:      PHYSICS_DEFAULTS.boundaryMode,
     vorticity:      PHYSICS_DEFAULTS.vorticityStrength.toPrecision(3),
     pressureIters:  PHYSICS_DEFAULTS.pressureIterations,

@@ -9,7 +9,6 @@ export class ControlPanel {
   constructor(velocityContainer, rotationContainer, physicsContainer, fieldSize, gapSize) {
     velocityContainer.style.width = `${fieldSize}px`;
     rotationContainer.style.width = `${fieldSize}px`;
-    velocityContainer.parentElement.style.gap = `${gapSize}px`;
 
     this._addBrightnessSlider(velocityContainer, 'Brightness', RENDER_DEFAULTS, 'velocityToneMidpoint', VEL_TONE_BASE, VEL_LOG_RANGE, BRIGHTNESS_SLIDER_POSITIONS.velocity, 'velocity');
     this._addBrightnessSlider(rotationContainer, 'Brightness', RENDER_DEFAULTS, 'rotationToneMidpoint', ROT_TONE_BASE, ROT_LOG_RANGE, BRIGHTNESS_SLIDER_POSITIONS.rotation, 'rotation');
@@ -25,8 +24,17 @@ export class ControlPanel {
     this._addSymmetricPowerSlider(container, 'Pair range', -1, 1, 0.4,
       () => ROTATION_FIELD.pairRange,
       v => { ROTATION_FIELD.pairRange = v; },
-      'Positive: local rotation centers first. Negative: distant pairs first. Higher absolute value → more GPU load.'
+      'Positive: local rotation centers first. Negative: distant pairs first. Higher absolute value → more GPU load.',
+      1000, 4
     );
+    this._addSlider({
+      container,
+      label: 'Sample stride',
+      steps: 5,
+      initialSliderValue: Math.log2(ROTATION_FIELD.sampleStride),
+      formatValue: v => String(2 ** Math.round(v)),
+      onChange: v => { ROTATION_FIELD.sampleStride = 2 ** Math.round(v); },
+    });
   }
 
   _buildPhysicsSliders(container) {
@@ -58,7 +66,7 @@ export class ControlPanel {
       () => 1 - PHYSICS_DEFAULTS.damping,
       v => { PHYSICS_DEFAULTS.damping = 1 - v; }
     );
-    this._addLinearSlider(container, 'Vorticity', 0, 2,
+    this._addLinearSlider(container, 'Vorticity', 0, 3,
       () => PHYSICS_DEFAULTS.vorticityStrength,
       v => { PHYSICS_DEFAULTS.vorticityStrength = v; }
     );
@@ -88,18 +96,20 @@ export class ControlPanel {
   // Linear slider. getValue/setValue work in the natural value space.
   // Power-curve slider symmetric around center (maps to mid of [min,max]).
   // Exponent > 1 gives finer control near center; exponent = 1 is linear.
-  _addSymmetricPowerSlider(container, label, min, max, exponent, getValue, setValue, hint = null) {
+  _addSymmetricPowerSlider(container, label, min, max, exponent, getValue, setValue, hint = null, steps = 100, decimals = 3) {
     const mid = (min + max) / 2;
     const halfRange = (max - min) / 2;
-    const toSlider = v => Math.sign(v - mid) * Math.pow(Math.abs((v - mid) / halfRange), exponent) * 50 + 50;
-    const fromSlider = t => mid + Math.sign(t - 50) * Math.pow(Math.abs((t - 50) / 50), 1 / exponent) * halfRange;
-    const initialSliderValue = Math.round(Math.max(0, Math.min(100, toSlider(getValue()))));
+    const half = steps / 2;
+    const toSlider   = v => Math.sign(v - mid) * Math.pow(Math.abs((v - mid) / halfRange), exponent) * half + half;
+    const fromSlider = t => mid + Math.sign(t - half) * Math.pow(Math.abs((t - half) / half), 1 / exponent) * halfRange;
+    const initialSliderValue = Math.round(Math.max(0, Math.min(steps, toSlider(getValue()))));
 
     this._addSlider({
       container,
       label,
       initialSliderValue,
-      formatValue: sliderValue => fromSlider(sliderValue).toFixed(3),
+      steps,
+      formatValue: sliderValue => fromSlider(sliderValue).toFixed(decimals),
       onChange: sliderValue => setValue(fromSlider(sliderValue)),
       hint,
     });
@@ -175,7 +185,7 @@ export class ControlPanel {
     input.id = 'grid-size-input';
     input.type = 'number';
     input.min = '32';
-    input.max = '512';
+    input.max = '1024';
 
     const fragment = document.createDocumentFragment();
     fragment.appendChild(label);
@@ -209,7 +219,7 @@ export class ControlPanel {
     return wrapper;
   }
 
-  _addSlider({ container, label, initialSliderValue, formatValue, onChange, hint = null }) {
+  _addSlider({ container, label, initialSliderValue, formatValue, onChange, hint = null, steps = 100 }) {
     const wrapper = document.createElement('div');
     wrapper.className = 'control-row';
 
@@ -220,7 +230,7 @@ export class ControlPanel {
     const slider = document.createElement('input');
     slider.type = 'range';
     slider.min = 0;
-    slider.max = 100;
+    slider.max = steps;
     slider.step = 1;
     slider.value = initialSliderValue;
 
