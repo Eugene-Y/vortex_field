@@ -5,6 +5,9 @@ import { RENDER_DEFAULTS, BRIGHTNESS_SLIDER_POSITIONS, PHYSICS_DEFAULTS, MOUSE_D
 const VEL_TONE_BASE = 30.0;
 const ROT_TONE_BASE = 0.3;
 
+const VORTICITY_MAX      = 50.0;
+const VORTICITY_EXPONENT = 2.0;   // >1 gives finer steps near zero
+
 export class ControlPanel {
   constructor(velocityContainer, rotationContainer, physicsContainer, fieldSize, gapSize) {
     velocityContainer.style.width = `${fieldSize}px`;
@@ -70,10 +73,14 @@ export class ControlPanel {
       () => 1 - PHYSICS_DEFAULTS.damping,
       v => { PHYSICS_DEFAULTS.damping = 1 - v; }
     );
-    this._addLinearSlider(container, 'Vorticity', 0, 3,
-      () => PHYSICS_DEFAULTS.vorticityStrength,
-      v => { PHYSICS_DEFAULTS.vorticityStrength = v; }
-    );
+    this._addSlider({
+      container,
+      label: 'Vorticity',
+      steps: 100,
+      initialSliderValue: Math.round(Math.pow(PHYSICS_DEFAULTS.vorticityStrength / VORTICITY_MAX, 1 / VORTICITY_EXPONENT) * 100),
+      formatValue: t => (VORTICITY_MAX * Math.pow(t / 100, VORTICITY_EXPONENT)).toFixed(2),
+      onChange:    t => { PHYSICS_DEFAULTS.vorticityStrength = VORTICITY_MAX * Math.pow(t / 100, VORTICITY_EXPONENT); },
+    });
     // Slider is inverted: right = gas (few iterations, compressible),
     // left = liquid (many iterations, incompressible).
     this._addIntSlider(container, 'Incompressibility (gas->liquid)', 1, 100,
@@ -104,7 +111,7 @@ export class ControlPanel {
     const mid = (min + max) / 2;
     const halfRange = (max - min) / 2;
     const half = steps / 2;
-    const toSlider   = v => Math.sign(v - mid) * Math.pow(Math.abs((v - mid) / halfRange), exponent) * half + half;
+    const toSlider = v => Math.sign(v - mid) * Math.pow(Math.abs((v - mid) / halfRange), exponent) * half + half;
     const fromSlider = t => mid + Math.sign(t - half) * Math.pow(Math.abs((t - half) / half), 1 / exponent) * halfRange;
     const initialSliderValue = Math.round(Math.max(0, Math.min(steps, toSlider(getValue()))));
 
