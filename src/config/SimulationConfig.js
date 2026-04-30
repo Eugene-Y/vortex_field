@@ -7,17 +7,17 @@ const _str   = (key, def) => _p.has(key) ? _p.get(key) : def;
 
 // All tuneable defaults live here. URL params override them on load.
 const DEFAULTS = {
-  gridSize:      100,
+  gridSize:      256,
   dampingLoss:   1e-7, // = 1 - damping; stored as loss for URL precision
   simSpeed:      2.0,
   brushRadius:   2.0,
   brushStrength: 100.0,
   patternScale:  0.7,
-  pairRange:          0.2,
+  pairRange:          0.04,
   pressureIterations: 40,
   vorticity:          0.0,
   velBrightness:      50,   // slider position 0–100
-  rotBrightness:      70,   // slider position 0–100
+  rotBrightness:      80,   // slider position 0–100
 };
 
 const VEL_TONE_BASE     = 30.0;
@@ -52,7 +52,7 @@ export const MOUSE_DEFAULTS = {
 };
 
 export const PATTERN_DEFAULTS = {
-  pattern: _str('pattern', 'circle'),
+  pattern: _str('pattern', 'disk-spin'),
 };
 
 export const ROTATION_FIELD = {
