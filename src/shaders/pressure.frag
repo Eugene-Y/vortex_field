@@ -19,13 +19,19 @@ float samplePressure(vec2 uv) {
 }
 
 float jacobiPressureStep(vec2 uv) {
-  float left      = samplePressure(uv + vec2(-u_texelSize, 0.0));
-  float right     = samplePressure(uv + vec2( u_texelSize, 0.0));
-  float bottom    = samplePressure(uv + vec2(0.0, -u_texelSize));
-  float top       = samplePressure(uv + vec2(0.0,  u_texelSize));
+  float left   = samplePressure(uv + vec2(-u_texelSize,  0.0));
+  float right  = samplePressure(uv + vec2( u_texelSize,  0.0));
+  float bottom = samplePressure(uv + vec2( 0.0, -u_texelSize));
+  float top    = samplePressure(uv + vec2( 0.0,  u_texelSize));
+  float sw     = samplePressure(uv + vec2(-u_texelSize, -u_texelSize));
+  float se     = samplePressure(uv + vec2( u_texelSize, -u_texelSize));
+  float nw     = samplePressure(uv + vec2(-u_texelSize,  u_texelSize));
+  float ne     = samplePressure(uv + vec2( u_texelSize,  u_texelSize));
   float divergence = texture(u_divergence, uv).r;
 
-  return (left + right + bottom + top - divergence) * 0.25;
+  // Mehrstellen 9-point isotropic Laplacian: axis-aligned ×4, diagonals ×1.
+  // Distributes pressure equally in all 8 directions vs axis-only 5-point stencil.
+  return (4.0 * (left + right + bottom + top) + (sw + se + nw + ne) - 6.0 * divergence) / 20.0;
 }
 
 void main() {

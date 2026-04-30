@@ -28,10 +28,43 @@ vec2 sampleVelocity(vec2 uv) {
   return texture(u_velocity, applyBoundary(uv)).xy;
 }
 
+// Catmull-Rom weights for fractional position t in [0, 1].
+vec4 catmullRomWeights(float t) {
+  float t2 = t * t;
+  float t3 = t2 * t;
+  return vec4(
+    0.5 * (-t3 + 2.0*t2 - t),
+    0.5 * ( 3.0*t3 - 5.0*t2 + 2.0),
+    0.5 * (-3.0*t3 + 4.0*t2 + t),
+    0.5 * ( t3 - t2)
+  );
+}
+
+// Bicubic Catmull-Rom interpolation over a 4x4 neighbourhood.
+// More isotropic than bilinear: treats diagonal directions equally to axis-aligned ones.
+vec2 sampleVelocityBicubic(vec2 uv) {
+  float h  = 1.0 / u_gridSize;
+  vec2  st = uv / h - 0.5;
+  vec2  i  = floor(st);
+  vec4  wx = catmullRomWeights(fract(st.x));
+  vec4  wy = catmullRomWeights(fract(st.y));
+
+  vec2 result = vec2(0.0);
+  for (int row = 0; row < 4; row++) {
+    vec2 rowSum = vec2(0.0);
+    for (int col = 0; col < 4; col++) {
+      vec2 p = (i + vec2(float(col) - 1.0, float(row) - 1.0) + 0.5) * h;
+      rowSum += wx[col] * sampleVelocity(p);
+    }
+    result += wy[row] * rowSum;
+  }
+  return result;
+}
+
 vec2 advectVelocity(vec2 uv) {
-  vec2 velocity = sampleVelocity(uv);
+  vec2 velocity         = sampleVelocity(uv);
   vec2 previousPosition = uv - velocity * u_deltaTime / u_gridSize;
-  return sampleVelocity(previousPosition) * u_damping;
+  return sampleVelocityBicubic(previousPosition) * u_damping;
 }
 
 void main() {
