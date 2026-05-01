@@ -163,8 +163,10 @@ fn computeRotation(
         let armB = periodicDisplacement(center, posB, gSize);
         if (dot(armB, armB) < 0.01) { continue; }
 
-        let omega        = computeAngularVelocity(velA, center, posA, gSize);
-        let contribution = omega * params.accumulationScale / f32(totalCells);
+        // Average ω from both cells — removes asymmetry from indexA<indexB selection.
+        let omegaA = computeAngularVelocity(velA, center, posA, gSize);
+        let omegaB = computeAngularVelocity(velB, center, posB, gSize);
+        let contribution = (omegaA + omegaB) * 0.5 * params.accumulationScale / f32(totalCells);
 
         let centerCol   = i32(center.x) % i32(params.gridSize);
         let centerRow   = i32(center.y) % i32(params.gridSize);
