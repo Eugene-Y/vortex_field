@@ -124,9 +124,18 @@ fn computeRotation(
   let isNegative  = params.pairRange < 0.0;
   let minRadius   = select(0.0, (1.0 + params.pairRange) * gSize * 0.5, isNegative);
   let maxRadius   = select(params.pairRange * gSize * 0.5, gSize * 0.5, isNegative);
-  let iMaxRadius  = i32(ceil(maxRadius));
   let minRadiusSq = minRadius * minRadius;
   let maxRadiusSq = maxRadius * maxRadius;
+
+  // When mask is active, both cells lie within the circle so their distance
+  // is at most 2R (the diameter). Clamp the loop range and bail early if
+  // the minimum pair distance exceeds the mask diameter — no valid pairs exist.
+  var iMaxRadius = i32(ceil(maxRadius));
+  if (params.useMask == 1u) {
+    let maskDiameter = 2.0 * sqrt(params.maskRadiusSq);
+    if (minRadius > maskDiameter) { return; }
+    iMaxRadius = min(iMaxRadius, i32(ceil(maskDiameter)));
+  }
 
   let bufferOffset = (workgroupId.x % ACCUMULATION_BUFFERS) * totalCells;
 
