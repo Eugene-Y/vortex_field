@@ -1,6 +1,6 @@
 'use strict';
 
-import { GRID_SIZE, ROTATION_FIELD, ROTATION_REFERENCE_GRID_SIZE, RENDER_DEFAULTS, COLORS } from '../config/SimulationConfig.js';
+import { GRID_SIZE, ROTATION_FIELD, ROTATION_REFERENCE_GRID_SIZE, RENDER_DEFAULTS, COLORS, PHYSICS_DEFAULTS } from '../config/SimulationConfig.js';
 import { VelocityBridge } from '../gpu/VelocityBridge.js';
 
 const WORKGROUP_SIZE       = 64;
@@ -48,7 +48,7 @@ export class WebGPURotationField {
     });
 
     this._computeParamsBuffer = device.createBuffer({
-      size:  48,
+      size:  64,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -232,7 +232,7 @@ export class WebGPURotationField {
 
     const mask = this._resolveMaskBox();
 
-    const data = new ArrayBuffer(48);
+    const data = new ArrayBuffer(64);
     const u32  = new Uint32Array(data);
     const f32  = new Float32Array(data);
     u32[0]  = this._gridSize;
@@ -247,6 +247,8 @@ export class WebGPURotationField {
     f32[9]  = mask.active ? mask.centerY  : 0;
     f32[10] = mask.active ? mask.radiusSq : 0;
     u32[11] = mask.active ? 1 : 0;
+    u32[12] = PHYSICS_DEFAULTS.boundaryMode;
+    // u32[13..15] padding
     this._device.queue.writeBuffer(this._computeParamsBuffer, 0, data);
   }
 

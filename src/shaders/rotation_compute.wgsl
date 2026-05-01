@@ -24,7 +24,11 @@ struct Params {
   maskCenterY:       f32,   // 36
   maskRadiusSq:      f32,   // 40
   useMask:           u32,   // 44
-}                            // 48 bytes
+  boundaryMode:      u32,   // 48  0=wrap 1=absorb 2=reflect
+  pad1:              u32,   // 52
+  pad2:              u32,   // 56
+  pad3:              u32,   // 60
+}                            // 64 bytes
 
 @group(0) @binding(0) var velocityTexture: texture_2d<f32>;
 @group(0) @binding(1) var<storage, read_write> rotationBuffer: array<atomic<i32>>;
@@ -48,6 +52,15 @@ fn periodicDisplacement(posA: vec2f, posB: vec2f, gridSize: f32) -> vec2f {
   return delta;
 }
 
+// Like periodicDisplacement but respects boundaryMode:
+// in Wrap mode (0) uses shortest torus path; otherwise direct vector.
+fn pairDisplacement(posA: vec2f, posB: vec2f, gridSize: f32) -> vec2f {
+  if (params.boundaryMode == 0u) {
+    return periodicDisplacement(posA, posB, gridSize);
+  }
+  return posB - posA;
+}
+
 fn computeInstantaneousRotationCenter(
   posA: vec2f, velA: vec2f,
   posB: vec2f, velB: vec2f,
@@ -65,15 +78,19 @@ fn computeInstantaneousRotationCenter(
   let denominator = normalA.x * normalB.y - normalA.y * normalB.x;
   if (abs(denominator) / (lenA * lenB) < params.parallelThreshold) { return invalid; }
 
-  let delta = periodicDisplacement(posA, posB, gridSize);
+  let delta = pairDisplacement(posA, posB, gridSize);
   let t     = (delta.x * normalB.y - delta.y * normalB.x) / denominator;
   let rawCenter = posA + t * normalA;
 
-  return rawCenter - gridSize * floor(rawCenter / gridSize);
+  // In Wrap mode fold center back into [0, gridSize); caller discards out-of-domain otherwise.
+  if (params.boundaryMode == 0u) {
+    return rawCenter - gridSize * floor(rawCenter / gridSize);
+  }
+  return rawCenter;
 }
 
 fn computeAngularVelocity(velA: vec2f, center: vec2f, posA: vec2f, gridSize: f32) -> f32 {
-  let arm             = periodicDisplacement(center, posA, gridSize);
+  let arm             = pairDisplacement(center, posA, gridSize);
   let armLengthSquared = dot(arm, arm);
   if (armLengthSquared < 0.01) { return 0.0; }
   let cross = arm.x * velA.y - arm.y * velA.x;
@@ -150,8 +167,17 @@ fn computeRotation(
       let dColStart = select(-iOuterCol, max(iInnerCol, 1), wing == 1);
       let dColEnd   = select(-iInnerCol, iOuterCol,         wing == 1);
       for (var dCol = dColStart; dCol <= dColEnd; dCol++) {
-        let colB   = ((colA + dCol) % i32(params.gridSize) + i32(params.gridSize)) % i32(params.gridSize);
-        let rowB   = ((rowA + dRow) % i32(params.gridSize) + i32(params.gridSize)) % i32(params.gridSize);
+        var colB: i32;
+        var rowB: i32;
+        if (params.boundaryMode == 0u) {
+          colB = ((colA + dCol) % i32(params.gridSize) + i32(params.gridSize)) % i32(params.gridSize);
+          rowB = ((rowA + dRow) % i32(params.gridSize) + i32(params.gridSize)) % i32(params.gridSize);
+        } else {
+          colB = colA + dCol;
+          rowB = rowA + dRow;
+          if (colB < 0 || colB >= i32(params.gridSize) ||
+              rowB < 0 || rowB >= i32(params.gridSize)) { continue; }
+        }
         let indexB = u32(rowB) * params.gridSize + u32(colB);
 
         if (indexB <= indexA) { continue; }
@@ -160,7 +186,7 @@ fn computeRotation(
         if (params.useMask == 1u && !insideMaskCircle(colB, rowB)) { continue; }
 
         let posB     = vec2f(f32(colB), f32(rowB));
-        let pairDisp = periodicDisplacement(posA, posB, gSize);
+        let pairDisp = pairDisplacement(posA, posB, gSize);
         let distSq   = dot(pairDisp, pairDisp);
         if (distSq > maxRadiusSq || distSq < minRadiusSq) { continue; }
 
@@ -169,7 +195,12 @@ fn computeRotation(
         let center = computeInstantaneousRotationCenter(posA, velA, posB, velB, gSize);
         if (center.x > 1e37) { continue; }
 
-        let armB = periodicDisplacement(center, posB, gSize);
+        // In non-Wrap modes discard centers that fall outside the domain.
+        if (params.boundaryMode != 0u &&
+            (center.x < 0.0 || center.x >= gSize ||
+             center.y < 0.0 || center.y >= gSize)) { continue; }
+
+        let armB = pairDisplacement(center, posB, gSize);
         if (dot(armB, armB) < 0.01) { continue; }
 
         // Average ω from both cells — removes asymmetry from indexA<indexB selection.
