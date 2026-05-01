@@ -2,12 +2,14 @@
 
 ## Concept
 
-Two coupled WebGL fields on a configurable grid (default 64×64, set via `GRID_SIZE`).
+Two coupled fields on a configurable grid (default 256×256, set via `GRID_SIZE`).
 
 **Field A — Velocity field.**
 A 2D fluid simulation (Navier-Stokes) on a grid. The user interacts with the mouse,
-injecting impulses into the field. Energy propagates, diffuses, and decays according
-to configurable parameters (damping, brush radius, brush strength).
+injecting impulses into the field. Energy propagates and decays according to configurable
+parameters (damping, brush radius, brush strength). Advection uses Catmull-Rom bicubic
+interpolation to suppress axis-aligned anisotropy artifacts. Explicit diffusion is omitted
+entirely — numerical diffusion from the semi-Lagrangian advection scheme is sufficient.
 
 **Field B — Instantaneous rotation field.**
 Reset to zero every frame. For every pair of cells (i, j) in Field A, compute the
@@ -16,20 +18,29 @@ signed magnitude of that relative rotation is accumulated into the cell of Field
 whose grid coordinate corresponds to that center of rotation. Sign encodes direction
 (clockwise vs counter-clockwise). Magnitude encodes strength.
 
-This is not an only-local neighborhood approximation. By default, all unique pairs in the radius of GRID_SIZE/2 are evaluated. Since the instantaneous center of rotation and angular velocity are symmetric for any pair (A, B) and (B, A), the GPU kernel only computes unique pairs (`indexA < indexB`) and doubles their contribution, halving the required math and blending workload. The interaction can be further restricted spatially via the `pairRange` parameter.
+The GPU kernel evaluates only unique pairs (`indexA < indexB`) to avoid double-counting.
+Angular velocity ω is computed from both cells independently and averaged, removing
+any asymmetry introduced by the indexA < indexB selection. The interaction can be
+restricted spatially via the `pairRange` parameter.
+
+Pair displacement and center validity are boundary-mode-aware: in Wrap mode the
+shortest torus path is used; in Absorb/Reflect modes the direct vector is used and
+pairs where cell B would be out of bounds, or where the computed center falls outside
+the domain, are discarded.
 
 For pairs whose velocity vectors are parallel (pure translation, no rotation):
 the contribution is discarded — pure translation has no instantaneous center.
 
-**ω formula:** `ω = (arm × vA) / |arm|²`
-where `arm` is the vector from cell j to cell i, and `vA` is the velocity at cell i.
-Dividing by `|arm|²` normalizes out distance — every pair contributes true angular
-velocity regardless of how far apart the cells are.
+**ω formula:** `ω = (arm × v) / |arm|²`
+where `arm` is the vector from the rotation center to the cell, and `v` is the
+velocity at that cell. Dividing by `|arm|²` normalizes out distance — every pair
+contributes true angular velocity regardless of how far apart the cells are.
 
 ## Architecture
 
 Single `index.html` entry point. JavaScript split across well-named module files.
-WebGL2 for all field computation and rendering. No build step — native ES modules.
+WebGL2 for velocity field computation and rendering; WebGPU compute pipeline for
+Field B rotation accumulation. No build step — native ES modules.
 
 ```
 index.html
@@ -39,15 +50,17 @@ src/
     SimulationConfig.js    — all named constants; single source of truth
   simulation/
     FluidField.js          — Field A: wraps physics step, exposes velocityTexture
-    RotationField.js       — Field B: per-frame rotation accumulation via GPU kernel
-    NavierStokesStep.js    — physics step (advection, diffusion, pressure projection,
+    WebGPURotationField.js — Field B: WebGPU compute pipeline (accumulate → reduce → render)
+    NavierStokesStep.js    — physics step (advection, pressure projection,
                              vorticity confinement)
-    PairRotationKernel.js  — draws GRID_SIZE⁴ points, one per pair, additive blending
+    PhysicsRegistry.js     — maps physics model identifiers to step implementations
   rendering/
-    FieldRenderer.js       — renders either field to the appropriate viewport
+    FieldRenderer.js       — renders velocity field to its viewport
+    ColorMap.js            — named color mapping functions
   interaction/
     MouseInjector.js       — translates mouse events into field impulses
     PatternInjector.js     — double-click injection of velocity patterns on Field B
+    FocusMaskInteractor.js — click/drag on Field B to restrict rotation to a focus circle
   ui/
     ControlPanel.js        — all DOM slider creation and wiring
   gl/
@@ -55,22 +68,24 @@ src/
                              and EXT_float_blend (critical — see below)
     Framebuffer.js         — PingPongFramebuffer and SingleFramebuffer abstractions
     ShaderProgram.js       — shader compilation, uniform cache, bind/set methods
+  gpu/
+    WebGPUDevice.js        — WebGPU adapter/device acquisition
+    VelocityBridge.js      — copies velocity from WebGL framebuffer to WebGPU texture
   shaders/
     common.vert                — full-screen quad vertex shader (shared)
-    advect.frag
-    diffuse.frag
+    advect.frag                — bicubic Catmull-Rom semi-Lagrangian advection
     divergence.frag
-    pressure.frag
+    pressure.frag              — 9-point Mehrstellen isotropic pressure Jacobi
     subtract_gradient.frag
     inject_impulse.frag        — Gaussian impulse for mouse strokes
     inject_disk.frag           — single-pass filled disk injection (spin/explode/implode)
     vorticity_curl.frag        — computes scalar curl field
     vorticity_confinement.frag — applies confinement force to re-energise vortices
     noise.frag
-    rotation_accumulate.vert   — per-pair vertex shader: computes center, clips to grid
-    rotation_accumulate.frag   — outputs ω contribution for additive blending
-    render.frag                — Reinhard tonemapping for both fields; HSV for velocity,
-                                 orange/blue for rotation
+    render.frag                — Reinhard tonemapping for velocity field; HSV encoding
+    rotation_compute.wgsl      — WGSL compute: accumulates ω into K atomic i32 buffers
+    rotation_reduce.wgsl       — WGSL compute: sums K buffers → flat f32 output buffer
+    rotation_render.wgsl       — WGSL render: output buffer → canvas (orange/blue tones)
 ```
 
 ## Code Quality Rules — Non-Negotiable
@@ -86,7 +101,7 @@ excuse sloppy code. The following rules apply without exception.
 - Every function name must describe what it does, not how.
   `stepNavierStokes()` not `update()`.
   `computeInstantaneousRotationCenter()` not `calc()`.
-- No single-letter variables outside of shader GLSL math (where `u`, `v` are domain-standard).
+- No single-letter variables outside of shader GLSL/WGSL math (where `u`, `v` are domain-standard).
 - No abbreviations that require context to decode. `viscosity` not `visc`. `velocity` not `vel`.
 
 **Decomposition**
@@ -103,14 +118,15 @@ excuse sloppy code. The following rules apply without exception.
   when the why is non-obvious (e.g. a numerical stability trick).
 
 **Shaders**
-- GLSL functions are also named descriptively.
+- GLSL/WGSL functions are also named descriptively.
 - No monolithic `main()` that does everything. Break into named functions.
 
 **State**
 - No shared mutable globals. State lives in class instances passed explicitly.
-- Exception: `PHYSICS_DEFAULTS` and `MOUSE_DEFAULTS` in `SimulationConfig.js` are
-  intentionally mutable — the UI writes to them and the physics step reads them live
-  each frame, so slider changes take effect immediately without any extra wiring.
+- Exception: `PHYSICS_DEFAULTS`, `MOUSE_DEFAULTS`, and `ROTATION_FIELD` in
+  `SimulationConfig.js` are intentionally mutable — the UI writes to them and the
+  simulation reads them live each frame, so slider changes take effect immediately
+  without any extra wiring.
 
 ## Layout
 
@@ -122,11 +138,11 @@ Both fields are always visible simultaneously, side by side:
 
 No toggle, no split-view switch. Both render every frame.
 
-Single canvas, single GL context. The canvas width is `CANVAS_FIELD_SIZE * 2 + DISPLAY_GAP`.
-Two viewports are set per frame — one for each field. `DISPLAY_GAP` (px) separates them.
+Field A is a WebGL canvas. Field B is a WebGPU canvas. They sit inside a flex container
+with `DISPLAY_GAP` (px) of space between them.
 
-`CANVAS_FIELD_SIZE` is computed dynamically from `window.innerWidth` and `window.innerHeight`
-so both fields always fit on screen at the largest integer scale that fits.
+Each canvas size is computed dynamically from `window.innerWidth` and `window.innerHeight`
+so both fields always fit on screen at the largest integer multiple of `DISPLAY_SCALE` that fits.
 
 **Field A** — velocity magnitude mapped to brightness via HSV (hue = direction, value = speed).
 Brightness uses Reinhard tonemapping: `x / (x + c)` where `c = velocityToneMidpoint`.
@@ -146,31 +162,39 @@ Every tuneable value lives in `src/config/SimulationConfig.js` as a named export
 No magic numbers anywhere else in the codebase. Current structure:
 
 ```js
-export const GRID_SIZE = 64;
+export const GRID_SIZE = 256;
 
-export const DISPLAY_SCALE = 8;  // pixels per grid cell (max; clamped to fit screen)
+export const DISPLAY_SCALE = 7;  // pixels per grid cell (max; clamped to fit screen)
 export const DISPLAY_GAP = 32;   // pixel gap between the two fields
 
+// Reference velocity (px/s) at which speedSensitivity=1 gives a 1× strength multiplier.
+export const MOUSE_SPEED_REFERENCE = 400;
+
+// Reference grid size for Field B brightness auto-compensation.
+export const ROTATION_REFERENCE_GRID_SIZE = 100;
+
 export const PHYSICS_DEFAULTS = {
-  viscosity:           0.001,    // dominated by numerical diffusion; see Known Limitations
-  damping:             0.995,    // per-frame velocity retention (1 = no loss)
-  diffusionIterations: 20,
-  pressureIterations:  40,       // fewer = more compressible / gas-like
-  simulationSpeed:     1.0,      // dt multiplier; qualitatively changes flow character
-  boundaryMode:        0,        // 0=wrap 1=absorb 2=reflect
-  vorticityStrength:   0.0,      // vorticity confinement ε; 0 = disabled
+  damping:             0.9999999, // per-second velocity retention; applied as pow(damping, dt)
+  pressureIterations:  40,        // fewer = more compressible / gas-like
+  simulationSpeed:     2.0,       // dt multiplier; qualitatively changes flow character
+  boundaryMode:        0,         // 0=wrap 1=absorb 2=reflect
+  vorticityStrength:   0.0,       // vorticity confinement ε; 0 = disabled
 };
 
 export const MOUSE_DEFAULTS = {
-  impulseRadius:   2.0,  // brush radius in grid cells
-  impulseStrength: 100.0,
-  patternScale:    0.5,  // pattern size as fraction of field
+  impulseRadius:    2.0,   // brush radius in grid cells
+  impulseStrength:  100.0,
+  speedSensitivity: 1.0,   // 0 = constant strength; 1 = fully speed-scaled
+  patternScale:     0.7,   // pattern size as fraction of field
 };
 
 export const ROTATION_FIELD = {
   parallelThreshold: 0.001,  // below this cross-product magnitude → discard pair
   accumulationScale: 1.0,
-  pairRange:         1.0,    // signed: positive = local-first, negative = distant-first
+  pairRange:         0.04,   // signed: positive = local-first, negative = distant-first
+  sampleStride:      1,      // skip cells: stride S samples every S-th cell in each axis
+  maskCenter:        null,   // [col, row] grid coords of focus circle center; null = no mask
+  maskRadius:        null,   // focus circle radius in grid cells
 };
 
 export const RENDER_DEFAULTS = {
@@ -191,6 +215,7 @@ export const COLORS = {
 - `_addLogSlider` — log-scaled, center = default value at construction
 - `_addLinearSlider` — linear, float display
 - `_addIntSlider` — linear, integer display
+- `_addSlider` — generic; caller supplies `formatValue` and `onChange` for custom curves
 - `_addSymmetricPowerSlider` — power curve symmetric around center; exponent < 1 gives
   finer control near center (used for Pair range)
 
@@ -199,16 +224,21 @@ Physics sliders appear below Field A. Brightness sliders appear below their resp
 Current sliders:
 - **Brightness** (under each field) — adjusts tone midpoints
 - **Boundary** (dropdown) — Wrap / Absorb / Reflect; Grid size input on same row
-- **Brush radius** — `MOUSE_DEFAULTS.impulseRadius` (log, 0.5–20)
+- **Brush radius** — `MOUSE_DEFAULTS.impulseRadius` (log, 0.5–256)
 - **Brush strength** — `MOUSE_DEFAULTS.impulseStrength` (log, 1–500)
-- **dt** — `PHYSICS_DEFAULTS.simulationSpeed` (log, 0.1–10); qualitatively changes flow
+- **Speed sensitivity** — `MOUSE_DEFAULTS.speedSensitivity` (linear, 0–1); 0 = constant
+  strength regardless of mouse speed; 1 = fully speed-scaled
+- **dt** — `PHYSICS_DEFAULTS.simulationSpeed` (log, 0.0001–10); qualitatively changes flow
 - **Damping loss** — `1 - damping` (log, near-zero to 0.2)
-- **Vorticity** — `vorticityStrength` (linear, 0–2); re-energises vortices; 0 = off
+- **Vorticity** — `vorticityStrength` (power-curve, exponent 2, 0–50); re-energises vortices;
+  0 = off; power curve gives finer control near zero
 - **Incompressibility (liquid / gas)** — inverted pressure iterations (1–100);
   right = liquid (many iters, incompressible), left = gas (few iters, compressible)
 - **Pattern size** (under Field B) — `MOUSE_DEFAULTS.patternScale`
 - **Pair range** (under Field B) — power-curve symmetric slider, exponent 0.4;
   positive = local pairs first, negative = distant pairs first
+- **Sample stride** (under Field B) — powers of 2 (1, 2, 4, 8, 16, 32); skips cells in both
+  axes, reducing computation by stride²; brightness auto-compensated
 
 **Pattern injection** (`PatternInjector.js` — double-click on Field B):
 A dropdown below Field B selects the injection pattern. Double-clicking injects at
@@ -227,11 +257,22 @@ Current patterns:
 - **Random noise** — per-cell pseudo-random velocity via `noise.frag`
 
 **Mouse injection** (`MouseInjector.js`):
-- `mousedown` on canvas sets `_pressedInField = true`; injection only fires if drag
-  originated on Field A — prevents slider interaction from leaking into the field
+- `mousedown` on Field A canvas activates injection; clicks on Field B are ignored
 - Between frames, the full stroke segment (prev → current position) is interpolated
   at `0.75 × brushRadius` step spacing so fast motion leaves no gaps
 - Mouse leaving field bounds resets `_previousPosition` to prevent phantom strokes on re-entry
+- Impulse strength is speed-scaled: `strength = impulseStrength × (1 − sensitivity + sensitivity × speedFactor)`
+  where `speedFactor = pixelsPerSecond / MOUSE_SPEED_REFERENCE`; `speedSensitivity = 0`
+  gives constant strength, `= 1` scales fully with mouse velocity
+
+**Focus mask** (`FocusMaskInteractor.js`):
+- Click or drag on Field B sets a circular focus mask at that grid position
+- While the mask is active, Field B dispatches only the bounding box of the circle
+  (O(R²) threads instead of O(N²)); pairs where cell B or the computed center falls
+  outside the circle are discarded
+- A Canvas 2D dashed circle overlay is drawn over Field A to visualise the active region
+- Quick click on an already-active mask clears it; Escape always clears
+- Mask center, radius, and all other parameters are URL-persisted via `buildShareUrl()`
 
 ## Boundary Conditions
 
@@ -249,9 +290,34 @@ Three modes, selected via dropdown:
 - Pressure: Neumann (clamp) at ghost cells
 - Diffusion: Neumann (clamp)
 
+Field B respects boundary mode: pair displacement uses the shortest torus path only in
+Wrap mode; in other modes the direct vector is used, out-of-bounds cells B are skipped,
+and computed rotation centers outside the domain are discarded.
+
+## Advection
+
+Semi-Lagrangian advection with Catmull-Rom bicubic interpolation (`advect.frag`).
+Each cell traces back `position − velocity × dt`, then samples the velocity field with
+a 4×4 Catmull-Rom kernel (separable in x and y). The bicubic interpolation suppresses
+the axis-aligned anisotropy artifacts that bilinear produces.
+
+Explicit Jacobi diffusion is omitted. The semi-Lagrangian scheme introduces numerical
+diffusion of approximately `h²/(2·dt)`, which is sufficient and removes the need for a
+separate diffusion pass.
+
+Damping is applied as `pow(PHYSICS_DEFAULTS.damping, deltaTime)` — a per-second
+retention factor independent of frame rate.
+
+## Pressure Solver
+
+Nine-point Mehrstellen isotropic Laplacian (`pressure.frag`) instead of the standard
+5-point stencil. The 9-point formula weights cardinal neighbors ×4 and diagonal neighbors ×1,
+divides by 20: `(4*(left+right+bottom+top) + (sw+se+nw+ne) − 6·divergence) / 20`. This
+reduces the directional bias that causes diagonal artifacts with the 5-point stencil.
+
 ## Vorticity Confinement
 
-Two-pass process after advection and diffusion, before pressure projection:
+Two-pass process after advection, before pressure projection:
 1. `vorticity_curl.frag` — computes scalar curl `ω = ∂vy/∂x − ∂vx/∂y` (raw finite
    differences, not divided by texelSize)
 2. `vorticity_confinement.frag` — computes `∇|ω|`, normalises it to unit vector `η`,
@@ -260,15 +326,38 @@ Two-pass process after advection and diffusion, before pressure projection:
 The force re-energises vortex cores that numerical diffusion would otherwise smooth away.
 Skipped entirely when `vorticityStrength == 0` (no GPU cost).
 
+## Field B — WebGPU Compute Pipeline
+
+Field B rotation accumulation runs entirely on WebGPU (`WebGPURotationField.js`).
+The pipeline has three passes per frame:
+
+1. **Velocity upload** — `VelocityBridge` reads the WebGL velocity framebuffer via
+   `readPixels` and writes it to a WebGPU texture.
+
+2. **Compute pass** (`rotation_compute.wgsl`) — N² threads (one per cell i), each
+   iterates over cell j neighbors within `pairRange` radius where `j > i`. For each
+   valid pair the instantaneous rotation center is computed and ω averaged from both
+   cells is accumulated into one of K=16 atomic i32 accumulation buffers selected by
+   `workgroupId % K`, reducing CAS contention K-fold. Accumulation uses a CAS-based
+   f32 atomic add (bit-cast through i32; `clearBuffer(0)` initialises correctly since
+   0x00000000 is 0.0 in IEEE 754).
+
+   When the focus mask is active, threads cover only the bounding box of the circle
+   (O(R²) instead of O(N²)), and pairs where cell B or the center is outside the
+   circle are discarded. When `pairRange` has a minimum radius that exceeds the mask
+   diameter, the thread exits early with no work.
+
+3. **Reduce pass** (`rotation_reduce.wgsl`) — N² threads sum the K accumulation
+   buffers into a flat f32 output buffer.
+
+4. **Render pass** (`rotation_render.wgsl`) — a full-screen quad samples the output
+   buffer and applies Reinhard tonemapping with orange/blue color encoding.
+
 ## WebGL Requirements
 
 `GlContext.js` requires two extensions at startup (throws if unavailable):
 - `EXT_color_buffer_float` — needed to render into R32F/RG32F framebuffers
-- `EXT_float_blend` — needed for additive blending into float framebuffers (Field B)
-
-Without `EXT_float_blend`, additive blending into a float texture is undefined behavior:
-each draw call would overwrite rather than accumulate, so Field B would show only one
-random pair per pixel instead of the correct sum over all pairs.
+- `EXT_float_blend` — needed for additive blending into float framebuffers
 
 ## Extensibility Requirements
 
@@ -291,14 +380,14 @@ The code must be written so the following changes require minimal surgery:
 - `SimulationConfig.js` values are the single source of truth
 - UI reads from and writes to config only, never touches simulation internals directly
 - Add sliders via `ControlPanel._addLogSlider()`, `_addLinearSlider()`, `_addIntSlider()`,
-  or `_addSymmetricPowerSlider()`
+  `_addSlider()`, or `_addSymmetricPowerSlider()`
 - Every new control **must** have a corresponding URL parameter: add it to `DEFAULTS`,
   parse it with `_float`/`_int`/`_str` in `PHYSICS_DEFAULTS` / `MOUSE_DEFAULTS` / etc.,
   and serialize it in `buildShareUrl()`. This is required — share URLs must fully
   reproduce the simulation state.
 
 **Adding a new color map:**
-- Add a named function to a `ColorMap.js` module
+- Add a named function to `rendering/ColorMap.js`
 - Pass it as a parameter to `FieldRenderer`
 
 ## Pair Interaction Range
@@ -313,20 +402,26 @@ which pairs contribute to Field B.
   values — they exceed `gridSize/2` on the periodic torus, ≈22% of all pairs).
 
 The slider uses a symmetric power curve (exponent 0.4) for finer control near zero.
-The discard is a single early-return in the vertex shader. The draw call still submits
-`GRID_SIZE⁴` vertices regardless of range — GPU vertex work is constant, only fragment
-writes are skipped. Higher |pairRange| = more GPU blend load.
+
+The compute shader translates pairRange into `[minRadius, maxRadius]` bounds and loops
+only over the annulus. Higher `|pairRange|` = more work per thread; lower values = fewer
+neighbor iterations.
+
+**Sample stride** reduces computation further: stride S samples every S-th cell in each
+axis, reducing contributing pairs by S². Field B brightness is auto-compensated by
+multiplying `accumulationScale` by `sampleStride²` and by `gridSize / ROTATION_REFERENCE_GRID_SIZE`
+so the display stays calibrated across both parameters.
 
 ## Known Limitations
 
-**Viscosity slider was removed.** The semi-Lagrangian advection scheme introduces numerical
-diffusion of approximately `h²/(2·dt)`. Any explicit viscosity below this threshold has no
-visible effect. The `dt` slider (`simulationSpeed`) qualitatively changes the flow regime
-and is a more meaningful control.
+**No explicit viscosity slider.** The semi-Lagrangian advection scheme introduces numerical
+diffusion. The `dt` slider (`simulationSpeed`) qualitatively changes the flow regime and
+is the most meaningful control for flow character.
 
-**Field B disappears at large grid sizes.** Field B draws `GRID_SIZE⁴` points. At
-GRID_SIZE=128 that is ~268M points; at 256 it is ~4.3 billion — GPU timeout. Use
-`pairRange` to reduce load at larger grid sizes.
+**Field B GPU load scales with N².** At gridSize=256 the compute shader dispatches 65536
+threads, each iterating up to O(N) neighbors. Use `pairRange` to restrict the interaction
+radius and `sampleStride` to sub-sample the grid. The focus mask further reduces dispatch
+to O(R²) for the selected region.
 
 **CFL instability at very high impulse strength.** Semi-Lagrangian advection requires
 `velocity × dt / gridSize < 1` per cell. At extreme strength values the condition is
@@ -341,7 +436,6 @@ violated and the field becomes chaotic. This is a fundamental limit of the schem
 ## TODOs
 - export animation
 - reaction-diffusion
-- интенсивность кисти не точечная а зависит от скорости мыши
 - пресеты
 - temperature field / buoyancy (Boussinesq)
 - BFECC advection for lower numerical diffusion
