@@ -31,4 +31,11 @@ export class UniformWriter {
   pad() { this._index++; return this; }
 
   result() { return this._buffer; }
+
+  // Writes the accumulated buffer to a GPUBuffer via device.queue.writeBuffer.
+  // Returns this for chaining, though typically called at the end of the chain.
+  writeBuffer(device, gpuBuffer) {
+    device.queue.writeBuffer(gpuBuffer, 0, this._buffer);
+    return this;
+  }
 }

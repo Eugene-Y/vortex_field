@@ -1,10 +1,8 @@
 'use strict';
 
-import { createGlContext }         from './gl/GlContext.js';
 import { createWebGPUDevice }      from './gpu/WebGPUDevice.js';
 import { FluidField }              from './simulation/FluidField.js';
 import { WebGPURotationField }     from './simulation/WebGPURotationField.js';
-import { FieldRenderer }           from './rendering/FieldRenderer.js';
 import { MouseInjector }           from './interaction/MouseInjector.js';
 import { ControlPanel }            from './ui/ControlPanel.js';
 import { PatternInjector }         from './interaction/PatternInjector.js';
@@ -30,61 +28,52 @@ async function loadShaderSource(path) {
 
 async function loadAllShaders() {
   const [
-    commonVert,
-    advectFrag,
-    diffuseFrag,
-    divergenceFrag,
-    pressureFrag,
-    subtractGradientFrag,
-    injectImpulseFrag,
-    noiseFrag,
-    vorticityCurlFrag,
-    vorticityConfinementFrag,
-    injectDiskFrag,
-    renderFrag,
-    rotationComputeWgsl,
-    rotationReduceWgsl,
-    rotationRenderWgsl,
+    velocityAdvect,
+    velocityDivergence,
+    velocityPressure,
+    velocitySubtractGradient,
+    velocityVorticityCurl,
+    velocityVorticityConfinement,
+    velocityInjectImpulse,
+    velocityInjectDisk,
+    velocityNoise,
+    velocityRender,
+    rotationCompute,
+    rotationReduce,
+    rotationRender,
   ] = await Promise.all([
-    loadShaderSource('src/shaders/common.vert'),
-    loadShaderSource('src/shaders/advect.frag'),
-    loadShaderSource('src/shaders/diffuse.frag'),
-    loadShaderSource('src/shaders/divergence.frag'),
-    loadShaderSource('src/shaders/pressure.frag'),
-    loadShaderSource('src/shaders/subtract_gradient.frag'),
-    loadShaderSource('src/shaders/inject_impulse.frag'),
-    loadShaderSource('src/shaders/noise.frag'),
-    loadShaderSource('src/shaders/vorticity_curl.frag'),
-    loadShaderSource('src/shaders/vorticity_confinement.frag'),
-    loadShaderSource('src/shaders/inject_disk.frag'),
-    loadShaderSource('src/shaders/render.frag'),
+    loadShaderSource('src/shaders/velocity_advect.wgsl'),
+    loadShaderSource('src/shaders/velocity_divergence.wgsl'),
+    loadShaderSource('src/shaders/velocity_pressure.wgsl'),
+    loadShaderSource('src/shaders/velocity_subtract_gradient.wgsl'),
+    loadShaderSource('src/shaders/velocity_vorticity_curl.wgsl'),
+    loadShaderSource('src/shaders/velocity_vorticity_confinement.wgsl'),
+    loadShaderSource('src/shaders/velocity_inject_impulse.wgsl'),
+    loadShaderSource('src/shaders/velocity_inject_disk.wgsl'),
+    loadShaderSource('src/shaders/velocity_noise.wgsl'),
+    loadShaderSource('src/shaders/velocity_render.wgsl'),
     loadShaderSource('src/shaders/rotation_compute.wgsl'),
     loadShaderSource('src/shaders/rotation_reduce.wgsl'),
     loadShaderSource('src/shaders/rotation_render.wgsl'),
   ]);
 
   return {
-    physics: {
-      vert:                   commonVert,
-      advect:                 advectFrag,
-      diffuse:                diffuseFrag,
-      divergence:             divergenceFrag,
-      pressure:               pressureFrag,
-      subtractGradient:       subtractGradientFrag,
-      injectImpulse:          injectImpulseFrag,
-      noise:                  noiseFrag,
-      vorticityCurl:          vorticityCurlFrag,
-      vorticityConfinement:   vorticityConfinementFrag,
-      injectDisk:             injectDiskFrag,
-    },
-    render: {
-      vert: commonVert,
-      frag: renderFrag,
+    velocity: {
+      advect:               velocityAdvect,
+      divergence:           velocityDivergence,
+      pressure:             velocityPressure,
+      subtractGradient:     velocitySubtractGradient,
+      vorticityCurl:        velocityVorticityCurl,
+      vorticityConfinement: velocityVorticityConfinement,
+      injectImpulse:        velocityInjectImpulse,
+      injectDisk:           velocityInjectDisk,
+      noise:                velocityNoise,
+      render:               velocityRender,
     },
     rotation: {
-      compute: rotationComputeWgsl,
-      reduce:  rotationReduceWgsl,
-      render:  rotationRenderWgsl,
+      compute: rotationCompute,
+      reduce:  rotationReduce,
+      render:  rotationRender,
     },
   };
 }
@@ -94,19 +83,6 @@ function configureCanvas(canvas) {
   canvas.height = CANVAS_FIELD_SIZE;
   canvas.style.width  = `${CANVAS_FIELD_SIZE}px`;
   canvas.style.height = `${CANVAS_FIELD_SIZE}px`;
-}
-
-function createFullScreenQuadVao(gl) {
-  const positions = new Float32Array([-1, -1,  1, -1,  -1, 1,  1, 1]);
-  const vao = gl.createVertexArray();
-  gl.bindVertexArray(vao);
-  const buffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-  gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
-  gl.enableVertexAttribArray(0);
-  gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-  gl.bindVertexArray(null);
-  return vao;
 }
 
 function showWebGPUError(message) {
@@ -135,18 +111,15 @@ async function main() {
     return;
   }
 
-  const gl      = createGlContext(canvasMain);
   const shaders = await loadAllShaders();
 
-  const fluidField    = new FluidField(gl, shaders.physics);
+  const fluidField    = new FluidField(gpuDevice, canvasMain, shaders.velocity);
   const rotationField = new WebGPURotationField(
-    gpuDevice, gl, canvasRotation,
+    gpuDevice, canvasRotation,
     shaders.rotation.compute,
     shaders.rotation.reduce,
     shaders.rotation.render,
   );
-  const renderer   = new FieldRenderer(gl, shaders.render.vert, shaders.render.frag);
-  const quadVao    = createFullScreenQuadVao(gl);
 
   const mouseInjector    = new MouseInjector(canvasMain, fluidField, CANVAS_FIELD_SIZE);
   const velocityControls = document.getElementById('controls-velocity');
@@ -169,19 +142,13 @@ async function main() {
   controlPanel.addRotationSliders(rotationControls);
   patternInjector.queueInitialInjection([0.5, 0.5]);
 
-  let previousTime    = performance.now();
+  let previousTime     = performance.now();
   let animationFrameId = null;
-  let paused          = false;
+  let paused           = false;
 
   function renderFields() {
-    rotationField.recomputeFrom(fluidField.velocityTexture, fluidField.velocityFramebuffer);
-
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.viewport(0, 0, CANVAS_FIELD_SIZE, CANVAS_FIELD_SIZE);
-    gl.clearColor(0, 0, 0, 1);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    renderer.renderVelocityField(fluidField.velocityTexture, quadVao);
-
+    fluidField.render();
+    rotationField.recomputeFrom(fluidField.velocityTexture);
     focusMask.updateOverlay();
   }
 
@@ -190,10 +157,10 @@ async function main() {
     const deltaTime     = baseDeltaTime * PHYSICS_DEFAULTS.simulationSpeed;
     previousTime = currentTime;
 
-    mouseInjector.applyPendingInjection(quadVao);
-    patternInjector.applyPendingPattern(quadVao);
+    mouseInjector.applyPendingInjection();
+    patternInjector.applyPendingPattern();
 
-    fluidField.step(deltaTime, quadVao);
+    fluidField.step(deltaTime);
     renderFields();
 
     animationFrameId = requestAnimationFrame(renderFrame);

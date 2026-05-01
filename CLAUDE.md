@@ -39,53 +39,43 @@ contributes true angular velocity regardless of how far apart the cells are.
 ## Architecture
 
 Single `index.html` entry point. JavaScript split across well-named module files.
-WebGL2 for velocity field computation and rendering; WebGPU compute pipeline for
-Field B rotation accumulation. No build step — native ES modules.
+Both fields run entirely on WebGPU — no WebGL. No build step — native ES modules.
 
 ```
 index.html
 src/
-  main.js                  — bootstrap, canvas sizing, render loop
+  main.js                       — bootstrap, canvas sizing, render loop
   config/
-    SimulationConfig.js    — all named constants; single source of truth
+    SimulationConfig.js         — all named constants; single source of truth
   simulation/
-    FluidField.js          — Field A: wraps physics step, exposes velocityTexture
-    WebGPURotationField.js — Field B: WebGPU compute pipeline (accumulate → reduce → render)
-    NavierStokesStep.js    — physics step (advection, pressure projection,
-                             vorticity confinement)
-    PhysicsRegistry.js     — maps physics model identifiers to step implementations
-  rendering/
-    FieldRenderer.js       — renders velocity field to its viewport
-    ColorMap.js            — named color mapping functions
+    FluidField.js               — Field A: wraps physics step, exposes velocityTexture
+    WebGPUNavierStokesStep.js   — physics step (advection, pressure projection,
+                                  vorticity confinement, inject, render) — all WebGPU
+    WebGPURotationField.js      — Field B: WebGPU compute pipeline (accumulate → reduce → render)
+    PhysicsRegistry.js          — maps physics model identifiers to step implementations
   interaction/
-    MouseInjector.js       — translates mouse events into field impulses
-    PatternInjector.js     — double-click injection of velocity patterns on Field B
-    FocusMaskInteractor.js — click/drag on Field B to restrict rotation to a focus circle
+    MouseInjector.js            — translates mouse events into field impulses
+    PatternInjector.js          — double-click injection of velocity patterns on Field B
+    FocusMaskInteractor.js      — click/drag on Field B to restrict rotation to a focus circle
   ui/
-    ControlPanel.js        — all DOM slider creation and wiring
-  gl/
-    GlContext.js           — WebGL2 context setup; requires EXT_color_buffer_float
-                             and EXT_float_blend (critical — see below)
-    Framebuffer.js         — PingPongFramebuffer and SingleFramebuffer abstractions
-    ShaderProgram.js       — shader compilation, uniform cache, bind/set methods
+    ControlPanel.js             — all DOM slider creation and wiring
   gpu/
-    WebGPUDevice.js        — WebGPU adapter/device acquisition
-    VelocityBridge.js      — copies velocity from WebGL framebuffer to WebGPU texture
+    WebGPUDevice.js             — WebGPU adapter/device acquisition
+    UniformWriter.js            — sequential writer for WebGPU uniform buffers
   shaders/
-    common.vert                — full-screen quad vertex shader (shared)
-    advect.frag                — bicubic Catmull-Rom semi-Lagrangian advection
-    divergence.frag
-    pressure.frag              — 9-point Mehrstellen isotropic pressure Jacobi
-    subtract_gradient.frag
-    inject_impulse.frag        — Gaussian impulse for mouse strokes
-    inject_disk.frag           — single-pass filled disk injection (spin/explode/implode)
-    vorticity_curl.frag        — computes scalar curl field
-    vorticity_confinement.frag — applies confinement force to re-energise vortices
-    noise.frag
-    render.frag                — Reinhard tonemapping for velocity field; HSV encoding
-    rotation_compute.wgsl      — WGSL compute: accumulates ω into K atomic i32 buffers
-    rotation_reduce.wgsl       — WGSL compute: sums K buffers → flat f32 output buffer
-    rotation_render.wgsl       — WGSL render: output buffer → canvas (orange/blue tones)
+    velocity_advect.wgsl              — bicubic Catmull-Rom semi-Lagrangian advection
+    velocity_divergence.wgsl          — ∇·v
+    velocity_pressure.wgsl            — 9-point Mehrstellen isotropic pressure Jacobi
+    velocity_subtract_gradient.wgsl   — v − ∇p; reflect boundary
+    velocity_inject_impulse.wgsl      — Gaussian impulse for mouse strokes
+    velocity_inject_disk.wgsl         — single-pass filled disk (spin/explode/implode)
+    velocity_vorticity_curl.wgsl      — computes scalar curl field
+    velocity_vorticity_confinement.wgsl — applies confinement force to re-energise vortices
+    velocity_noise.wgsl               — per-cell pseudo-random velocity
+    velocity_render.wgsl              — render pipeline: Reinhard tonemapping + HSV encoding
+    rotation_compute.wgsl             — WGSL compute: accumulates ω into K atomic i32 buffers
+    rotation_reduce.wgsl              — WGSL compute: sums K buffers → flat f32 output buffer
+    rotation_render.wgsl              — WGSL render: output buffer → canvas (orange/blue tones)
 ```
 
 ## Code Quality Rules — Non-Negotiable
@@ -101,7 +91,7 @@ excuse sloppy code. The following rules apply without exception.
 - Every function name must describe what it does, not how.
   `stepNavierStokes()` not `update()`.
   `computeInstantaneousRotationCenter()` not `calc()`.
-- No single-letter variables outside of shader GLSL/WGSL math (where `u`, `v` are domain-standard).
+- No single-letter variables outside of shader WGSL math (where `u`, `v` are domain-standard).
 - No abbreviations that require context to decode. `viscosity` not `visc`. `velocity` not `vel`.
 
 **Decomposition**
@@ -118,8 +108,8 @@ excuse sloppy code. The following rules apply without exception.
   when the why is non-obvious (e.g. a numerical stability trick).
 
 **Shaders**
-- GLSL/WGSL functions are also named descriptively.
-- No monolithic `main()` that does everything. Break into named functions.
+- WGSL functions are named descriptively.
+- No monolithic entry point that does everything. Break into named functions.
 
 **State**
 - No shared mutable globals. State lives in class instances passed explicitly.
@@ -138,7 +128,7 @@ Both fields are always visible simultaneously, side by side:
 
 No toggle, no split-view switch. Both render every frame.
 
-Field A is a WebGL canvas. Field B is a WebGPU canvas. They sit inside a flex container
+Both canvases are WebGPU. They sit inside a flex container
 with `DISPLAY_GAP` (px) of space between them.
 
 Each canvas size is computed dynamically from `window.innerWidth` and `window.innerHeight`
@@ -244,17 +234,17 @@ Current sliders:
 A dropdown below Field B selects the injection pattern. Double-clicking injects at
 that UV position in Field A space. Uses current brush radius/strength. Adds to existing
 velocity, never resets it. Initial pattern is queued for first render frame (not applied
-at startup) to guarantee stable GL state.
+at startup) to guarantee a stable GPU state.
 
 Current patterns:
 - **Disk — spin / explode / implode** — filled disk injected via single shader pass
-  (`inject_disk.frag`); Gaussian radial falloff avoids boundary divergence artifacts
+  (`velocity_inject_disk.wgsl`); Gaussian radial falloff avoids boundary divergence artifacts
 - **Polygons** (circle, triangle, square … decagon) — perimeter with CCW tangential velocity
 - **Parallel stripes** — alternating ←→ flow (seeds Kelvin-Helmholtz instability)
 - **Square grid lines** — crossing orthogonal jets
 - **Triangular grid lines** — three families at 0°/60°/120°
 - **Scattered points** — hexagonal packing, radially outward
-- **Random noise** — per-cell pseudo-random velocity via `noise.frag`
+- **Random noise** — per-cell pseudo-random velocity via `velocity_noise.wgsl`
 
 **Mouse injection** (`MouseInjector.js`):
 - `mousedown` on Field A canvas activates injection; clicks on Field B are ignored
@@ -278,17 +268,16 @@ Current patterns:
 
 Three modes, selected via dropdown:
 
-**Wrap (0):** Periodic — texture wrap `REPEAT`, fields connect edge to edge.
+**Wrap (0):** Periodic — fields connect edge to edge via `wrapI()` in all shaders.
 
 **Absorb (1):** Open boundary — fluid exits freely.
 - Advection: backtracked positions outside domain return `vec2(0)` (no energy smuggled in)
 - Pressure: Dirichlet `p=0` at ghost cells (consistent in both solve and gradient steps)
 - Velocity: no forced zeroing at boundary cells — fluid exits through natural advection
-- Diffusion: Neumann (clamp) — velocity continuous across boundary
 
 **Reflect (2):** Solid wall — normal velocity component negated at boundary cells.
 - Pressure: Neumann (clamp) at ghost cells
-- Diffusion: Neumann (clamp)
+- Gradient subtract: normal component negated at edge cells
 
 Field B respects boundary mode: pair displacement uses the shortest torus path only in
 Wrap mode; in other modes the direct vector is used, out-of-bounds cells B are skipped,
@@ -296,10 +285,10 @@ and computed rotation centers outside the domain are discarded.
 
 ## Advection
 
-Semi-Lagrangian advection with Catmull-Rom bicubic interpolation (`advect.frag`).
-Each cell traces back `position − velocity × dt`, then samples the velocity field with
-a 4×4 Catmull-Rom kernel (separable in x and y). The bicubic interpolation suppresses
-the axis-aligned anisotropy artifacts that bilinear produces.
+Semi-Lagrangian advection with Catmull-Rom bicubic interpolation (`velocity_advect.wgsl`).
+Each cell traces back `position − velocity × dt` in cell-centre space, then samples
+the velocity field with a 4×4 Catmull-Rom kernel (separable in x and y). The bicubic
+interpolation suppresses the axis-aligned anisotropy artifacts that bilinear produces.
 
 Explicit Jacobi diffusion is omitted. The semi-Lagrangian scheme introduces numerical
 diffusion of approximately `h²/(2·dt)`, which is sufficient and removes the need for a
@@ -310,31 +299,56 @@ retention factor independent of frame rate.
 
 ## Pressure Solver
 
-Nine-point Mehrstellen isotropic Laplacian (`pressure.frag`) instead of the standard
-5-point stencil. The 9-point formula weights cardinal neighbors ×4 and diagonal neighbors ×1,
-divides by 20: `(4*(left+right+bottom+top) + (sw+se+nw+ne) − 6·divergence) / 20`. This
-reduces the directional bias that causes diagonal artifacts with the 5-point stencil.
+Nine-point Mehrstellen isotropic Laplacian (`velocity_pressure.wgsl`) instead of the
+standard 5-point stencil. The 9-point formula weights cardinal neighbors ×4 and diagonal
+neighbors ×1, divides by 20: `(4*(left+right+bottom+top) + (sw+se+nw+ne) − 6·divergence) / 20`.
+This reduces the directional bias that causes diagonal artifacts with the 5-point stencil.
+
+Pressure is warm-started between frames (previous frame's solution as initial guess),
+improving Jacobi convergence without any extra zeroing cost.
 
 ## Vorticity Confinement
 
 Two-pass process after advection, before pressure projection:
-1. `vorticity_curl.frag` — computes scalar curl `ω = ∂vy/∂x − ∂vx/∂y` (raw finite
-   differences, not divided by texelSize)
-2. `vorticity_confinement.frag` — computes `∇|ω|`, normalises it to unit vector `η`,
+1. `velocity_vorticity_curl.wgsl` — computes scalar curl `ω = ∂vy/∂x − ∂vx/∂y`
+2. `velocity_vorticity_confinement.wgsl` — computes `∇|ω|`, normalises it to unit vector `η`,
    applies force `ε × ω × (η.y, −η.x) × dt` to velocity
 
 The force re-energises vortex cores that numerical diffusion would otherwise smooth away.
 Skipped entirely when `vorticityStrength == 0` (no GPU cost).
 
+## Field A — WebGPU Compute Pipeline
+
+Field A physics runs entirely on WebGPU (`WebGPUNavierStokesStep.js`).
+One encoder per `step()` call, submitted once:
+
+1. **Advect** (`velocity_advect.wgsl`) — semi-Lagrangian bicubic; ping-pong velocity textures.
+2. **Vorticity curl** (`velocity_vorticity_curl.wgsl`) — scalar curl → `r32float` curl texture.
+3. **Vorticity confinement** (`velocity_vorticity_confinement.wgsl`) — adds confinement force;
+   skipped if `vorticityStrength == 0`.
+4. **Divergence** (`velocity_divergence.wgsl`) — ∇·v → `r32float` divergence texture.
+5. **Pressure Jacobi** (`velocity_pressure.wgsl`) — N iterations; ping-pong pressure textures.
+6. **Subtract gradient** (`velocity_subtract_gradient.wgsl`) — v − ∇p; enforce incompressibility.
+
+Inject operations (impulse, disk, noise) each use a separate per-call encoder+submit so
+multiple injections per frame compose correctly without needing a params buffer array.
+
+**Texture convention:** row 0 = physical bottom (y-up). The render shader maps
+`uv.y = 0` (screen bottom) to row 0, preserving orientation. Mouse input flips y:
+`v = 1 − pixelY / fieldSize`.
+
+**UniformWriter** (`gpu/UniformWriter.js`) — sequential writer for WebGPU uniform buffers.
+Writes u32/f32 fields in declaration order, eliminating manual index arithmetic. Padding
+fields must be written explicitly via `pad()` to keep slot count in sync with the WGSL
+struct — wrong field count → detectable size mismatch at `writeBuffer` time.
+
 ## Field B — WebGPU Compute Pipeline
 
 Field B rotation accumulation runs entirely on WebGPU (`WebGPURotationField.js`).
-The pipeline has three passes per frame:
+Reads velocity directly from the GPUTexture exposed by `FluidField.velocityTexture` —
+no CPU round-trip. The pipeline has three passes per frame in one encoder:
 
-1. **Velocity upload** — `VelocityBridge` reads the WebGL velocity framebuffer via
-   `readPixels` and writes it to a WebGPU texture.
-
-2. **Compute pass** (`rotation_compute.wgsl`) — N² threads (one per cell i), each
+1. **Compute pass** (`rotation_compute.wgsl`) — N² threads (one per cell i), each
    iterates over cell j neighbors within `pairRange` radius where `j > i`. For each
    valid pair the instantaneous rotation center is computed and ω averaged from both
    cells is accumulated into one of K=16 atomic i32 accumulation buffers selected by
@@ -344,30 +358,30 @@ The pipeline has three passes per frame:
 
    When the focus mask is active, threads cover only the bounding box of the circle
    (O(R²) instead of O(N²)), and pairs where cell B or the center is outside the
-   circle are discarded. When `pairRange` has a minimum radius that exceeds the mask
-   diameter, the thread exits early with no work.
+   circle are discarded.
 
-3. **Reduce pass** (`rotation_reduce.wgsl`) — N² threads sum the K accumulation
+2. **Reduce pass** (`rotation_reduce.wgsl`) — N² threads sum the K accumulation
    buffers into a flat f32 output buffer.
 
-4. **Render pass** (`rotation_render.wgsl`) — a full-screen quad samples the output
+3. **Render pass** (`rotation_render.wgsl`) — a full-screen quad samples the output
    buffer and applies Reinhard tonemapping with orange/blue color encoding.
 
-## WebGL Requirements
-
-`GlContext.js` requires two extensions at startup (throws if unavailable):
-- `EXT_color_buffer_float` — needed to render into R32F/RG32F framebuffers
-- `EXT_float_blend` — needed for additive blending into float framebuffers
+The compute bind group is rebuilt each frame (takes the current velocity GPUTexture
+view) — cheap since `getBindGroupLayout` is not a GPU operation.
 
 ## Extensibility Requirements
 
 The code must be written so the following changes require minimal surgery:
 
 **Adding a new physics model** (e.g. wave equation, reaction-diffusion):
-- Implement a new class with the same interface as `NavierStokesStep.js`:
-  - `step(deltaTime, quadVao)`
-  - `injectImpulse(position, direction, radius, strength, quadVao)`
-  - `get velocityTexture`
+- Implement a new class with the same interface as `WebGPUNavierStokesStep.js`:
+  - `step(deltaTime)`
+  - `injectImpulse(position, direction, radius, strength)`
+  - `injectDisk(center, radiusUv, strength, mode)`
+  - `injectNoise(strength, seed)`
+  - `clearVelocity()`
+  - `renderToCanvas()`
+  - `get velocityTexture`  — current GPUTexture (rg32float)
   - `dispose()`
 - Register it in `PhysicsRegistry.js`
 - The rest of the system does not change
@@ -385,10 +399,6 @@ The code must be written so the following changes require minimal surgery:
   parse it with `_float`/`_int`/`_str` in `PHYSICS_DEFAULTS` / `MOUSE_DEFAULTS` / etc.,
   and serialize it in `buildShareUrl()`. This is required — share URLs must fully
   reproduce the simulation state.
-
-**Adding a new color map:**
-- Add a named function to `rendering/ColorMap.js`
-- Pass it as a parameter to `FieldRenderer`
 
 ## Pair Interaction Range
 

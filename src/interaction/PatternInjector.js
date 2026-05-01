@@ -63,21 +63,21 @@ export class PatternInjector {
     this._canvasRotation.addEventListener('dblclick', this._onDblClick);
   }
 
-  injectAt(center, quadVao) {
-    this._execute(this._select.value, center, quadVao);
+  injectAt(center) {
+    this._execute(this._select.value, center);
   }
 
   // Queues an injection to be applied on the next renderFrame call.
-  // Use this for startup injection to guarantee a stable GL state.
+  // Use this for startup injection to guarantee a stable GPU state.
   queueInitialInjection(center) {
     this._pending = { action: this._select.value, center };
   }
 
-  applyPendingPattern(quadVao) {
+  applyPendingPattern() {
     if (!this._pending) return;
     const { action, center } = this._pending;
     this._pending = null;
-    this._execute(action, center, quadVao);
+    this._execute(action, center);
   }
 
   dispose() {
@@ -112,11 +112,11 @@ export class PatternInjector {
 
   _onDblClick(event) {
     const action = this._select.value;
-    const center = (action === 'reset' || action === 'noise')
+    const center = (action === 'noise')
       ? null
       : this._rightFieldClickToUv(event);
 
-    if (action === 'reset' || action === 'noise' || center !== null) {
+    if (action === 'noise' || center !== null) {
       this._pending = { action, center };
     }
   }
@@ -138,45 +138,45 @@ export class PatternInjector {
     return [u, v];
   }
 
-  _execute(action, center, quadVao) {
+  _execute(action, center) {
     if (action === 'noise') {
-      this._injectNoise(quadVao);
+      this._injectNoise();
       return;
     }
 
     const sides = POLYGON_SIDES[action];
     if (sides !== undefined) {
-      this._injectPolygon(center, sides, quadVao);
+      this._injectPolygon(center, sides);
       return;
     }
-    if (action === 'disk-spin')    this._injectFilledDisk(center, 'spin', quadVao);
-    if (action === 'disk-explode') this._injectFilledDisk(center, 'explode', quadVao);
-    if (action === 'disk-implode') this._injectFilledDisk(center, 'implode', quadVao);
-    if (action === 'cross-spin')    this._injectCross(center, 'spin', quadVao);
-    if (action === 'cross-explode') this._injectCross(center, 'explode', quadVao);
-    if (action === 'cross-implode') this._injectCross(center, 'implode', quadVao);
-    if (action === 'stripes')   this._injectStripes(center, quadVao);
-    if (action === 'gridlines') this._injectSquareGridLines(center, quadVao);
-    if (action === 'trilines')  this._injectTriangularGridLines(center, quadVao);
-    if (action === 'points')    this._injectScatteredPoints(center, quadVao);
+    if (action === 'disk-spin')    this._injectFilledDisk(center, 'spin');
+    if (action === 'disk-explode') this._injectFilledDisk(center, 'explode');
+    if (action === 'disk-implode') this._injectFilledDisk(center, 'implode');
+    if (action === 'cross-spin')    this._injectCross(center, 'spin');
+    if (action === 'cross-explode') this._injectCross(center, 'explode');
+    if (action === 'cross-implode') this._injectCross(center, 'implode');
+    if (action === 'stripes')   this._injectStripes(center);
+    if (action === 'gridlines') this._injectSquareGridLines(center);
+    if (action === 'trilines')  this._injectTriangularGridLines(center);
+    if (action === 'points')    this._injectScatteredPoints(center);
   }
 
   // Dispatches to circle or regular polygon injection.
-  _injectPolygon(center, sides, quadVao) {
+  _injectPolygon(center, sides) {
     const radius   = MOUSE_DEFAULTS.impulseRadius;
     const strength = MOUSE_DEFAULTS.impulseStrength;
     const patternRadius = MOUSE_DEFAULTS.patternScale * 0.5;
 
     if (sides < 3) {
-      this._injectCircle(center, patternRadius, radius, strength, quadVao);
+      this._injectCircle(center, patternRadius, radius, strength);
     } else {
-      this._injectRegularPolygon(center, sides, patternRadius, radius, strength, quadVao);
+      this._injectRegularPolygon(center, sides, patternRadius, radius, strength);
     }
   }
 
   // Samples the circumference with a step count derived from GRID_SIZE and brush radius
   // so that every grid cell on the ring receives the impulse regardless of grid resolution.
-  _injectCircle(center, radiusUv, brushRadius, strength, quadVao) {
+  _injectCircle(center, radiusUv, brushRadius, strength) {
     const circumferenceUv = 2 * Math.PI * radiusUv;
     const steps = stepsForUvLength(circumferenceUv, brushRadius);
 
@@ -187,14 +187,14 @@ export class PatternInjector {
         center[1] + radiusUv * Math.sin(angle),
       ];
       const direction = [-Math.sin(angle), Math.cos(angle)]; // CCW tangent
-      this._fluidField.injectImpulse(position, direction, brushRadius, strength, quadVao);
+      this._fluidField.injectImpulse(position, direction, brushRadius, strength);
     }
   }
 
   // Injects each side of a regular polygon independently.
   // Step count per side is derived from the side's UV-space length so coverage is uniform.
   // The last point of each side is omitted to avoid double-injection at vertices.
-  _injectRegularPolygon(center, sides, radiusUv, brushRadius, strength, quadVao) {
+  _injectRegularPolygon(center, sides, radiusUv, brushRadius, strength) {
     for (let sideIndex = 0; sideIndex < sides; sideIndex++) {
       const angleA  = (sideIndex / sides)       * 2 * Math.PI - Math.PI / 2;
       const angleB  = ((sideIndex + 1) / sides) * 2 * Math.PI - Math.PI / 2;
@@ -219,28 +219,28 @@ export class PatternInjector {
           vertexA[0] + t * sideVec[0],
           vertexA[1] + t * sideVec[1],
         ];
-        this._fluidField.injectImpulse(position, direction, brushRadius, strength, quadVao);
+        this._fluidField.injectImpulse(position, direction, brushRadius, strength);
       }
     }
   }
 
   // Injects a filled disk in a single shader pass — no Gaussian point accumulation.
-  _injectFilledDisk(center, mode, quadVao) {
+  _injectFilledDisk(center, mode) {
     const patternRadius = MOUSE_DEFAULTS.patternScale * 0.5;
     const strength      = MOUSE_DEFAULTS.impulseStrength;
     const modeIndex     = mode === 'spin' ? 0 : mode === 'explode' ? 1 : 2;
-    this._fluidField.injectDisk(center, patternRadius, strength, modeIndex, quadVao);
+    this._fluidField.injectDisk(center, patternRadius, strength, modeIndex);
   }
 
   // At radius ≤ 1 every grid cell gets its own random direction (per-pixel noise).
   // At radius > 1 the field is tiled with overlapping Gaussian impulses (step = 0.75 × radius)
   // each pointing in a freshly randomised direction — coarser, blobby noise.
-  _injectNoise(quadVao) {
+  _injectNoise() {
     const brushRadius = MOUSE_DEFAULTS.impulseRadius;
     const strength    = MOUSE_DEFAULTS.impulseStrength;
 
     if (brushRadius <= 1) {
-      this._fluidField.addNoise(strength, Math.random(), quadVao);
+      this._fluidField.addNoise(strength, Math.random());
       return;
     }
 
@@ -258,7 +258,6 @@ export class PatternInjector {
           [Math.cos(angle), Math.sin(angle)],
           brushRadius,
           strength,
-          quadVao,
         );
       }
     }
@@ -268,7 +267,7 @@ export class PatternInjector {
   // spin: CCW tangential velocity along each arm (like wheel spokes).
   // explode: velocity pointing outward along each arm.
   // implode: velocity pointing inward along each arm.
-  _injectCross(center, mode, quadVao) {
+  _injectCross(center, mode) {
     const patternRadius = MOUSE_DEFAULTS.patternScale * 0.5;
     const brushRadius   = MOUSE_DEFAULTS.impulseRadius;
     const strength      = MOUSE_DEFAULTS.impulseStrength;
@@ -294,13 +293,13 @@ export class PatternInjector {
           mode === 'spin'    ? spinDir :
           mode === 'explode' ? armDir  :
           [-armDir[0], -armDir[1]]; // implode
-        this._fluidField.injectImpulse(position, direction, brushRadius, strength, quadVao);
+        this._fluidField.injectImpulse(position, direction, brushRadius, strength);
       }
     }
   }
 
   // Five horizontal stripes with alternating ←→ flow — seeds Kelvin-Helmholtz shear instability.
-  _injectStripes(center, quadVao) {
+  _injectStripes(center) {
     const STRIPE_COUNT  = 5;
     const patternRadius = MOUSE_DEFAULTS.patternScale * 0.5;
     const HALF_WIDTH    = patternRadius * 1.1;
@@ -317,14 +316,14 @@ export class PatternInjector {
       for (let col = 0; col < pointsPerStripe; col++) {
         const t = col / (pointsPerStripe - 1); // [0, 1] inclusive
         const u = center[0] + HALF_WIDTH * (t * 2 - 1);
-        this._fluidField.injectImpulse([u, v], direction, radius, strength, quadVao);
+        this._fluidField.injectImpulse([u, v], direction, radius, strength);
       }
     }
   }
 
   // 5 horizontal + 5 vertical lines, alternating flow direction per line.
   // Crossing orthogonal flows create vortices at every junction.
-  _injectSquareGridLines(center, quadVao) {
+  _injectSquareGridLines(center) {
     const LINE_COUNT    = 5;
     const patternRadius = MOUSE_DEFAULTS.patternScale * 0.5;
     const HALF_SPAN     = patternRadius;
@@ -341,7 +340,7 @@ export class PatternInjector {
       for (let p = 0; p < pointsPerLine; p++) {
         const t = p / (pointsPerLine - 1);
         const x = center[0] + HALF_SPAN * (t * 2 - 1);
-        this._fluidField.injectImpulse([x, center[1] + offset], hDirection, radius, strength, quadVao);
+        this._fluidField.injectImpulse([x, center[1] + offset], hDirection, radius, strength);
       }
 
       // Vertical line at x = center_x + offset
@@ -349,14 +348,14 @@ export class PatternInjector {
       for (let p = 0; p < pointsPerLine; p++) {
         const t = p / (pointsPerLine - 1);
         const y = center[1] + HALF_SPAN * (t * 2 - 1);
-        this._fluidField.injectImpulse([center[0] + offset, y], vDirection, radius, strength, quadVao);
+        this._fluidField.injectImpulse([center[0] + offset, y], vDirection, radius, strength);
       }
     }
   }
 
   // Three families of 5 parallel lines at 0°/60°/120°, each flowing along its line direction.
   // Creates hexagonal interference structure.
-  _injectTriangularGridLines(center, quadVao) {
+  _injectTriangularGridLines(center) {
     const LINE_COUNT    = 5;
     const patternRadius = MOUSE_DEFAULTS.patternScale * 0.5;
     const HALF_SPAN     = patternRadius * 1.1;
@@ -379,7 +378,7 @@ export class PatternInjector {
           const s = HALF_SPAN * (t * 2 - 1);
           const u = center[0] + s * direction[0] + offset * normal[0];
           const v = center[1] + s * direction[1] + offset * normal[1];
-          this._fluidField.injectImpulse([u, v], direction, radius, strength, quadVao);
+          this._fluidField.injectImpulse([u, v], direction, radius, strength);
         }
       }
     }
@@ -387,7 +386,7 @@ export class PatternInjector {
 
   // Hexagonally packed points (center + ring of 6 + ring of 12), each pointing radially outward.
   // These are discrete source points so step count does not apply.
-  _injectScatteredPoints(center, quadVao) {
+  _injectScatteredPoints(center) {
     const INNER_COUNT   = 6;
     const patternRadius = MOUSE_DEFAULTS.patternScale * 0.5;
     const INNER_RADIUS  = patternRadius * 0.5;
@@ -396,7 +395,7 @@ export class PatternInjector {
     const radius        = MOUSE_DEFAULTS.impulseRadius;
     const strength      = MOUSE_DEFAULTS.impulseStrength;
 
-    this._fluidField.injectImpulse(center, [1, 0], radius * 1.5, strength, quadVao);
+    this._fluidField.injectImpulse(center, [1, 0], radius * 1.5, strength);
 
     for (let i = 0; i < INNER_COUNT; i++) {
       const angle    = (i / INNER_COUNT) * 2 * Math.PI;
@@ -404,7 +403,7 @@ export class PatternInjector {
         center[0] + INNER_RADIUS * Math.cos(angle),
         center[1] + INNER_RADIUS * Math.sin(angle),
       ];
-      this._fluidField.injectImpulse(position, [Math.cos(angle), Math.sin(angle)], radius, strength, quadVao);
+      this._fluidField.injectImpulse(position, [Math.cos(angle), Math.sin(angle)], radius, strength);
     }
 
     for (let i = 0; i < OUTER_COUNT; i++) {
@@ -413,7 +412,7 @@ export class PatternInjector {
         center[0] + OUTER_RADIUS * Math.cos(angle),
         center[1] + OUTER_RADIUS * Math.sin(angle),
       ];
-      this._fluidField.injectImpulse(position, [Math.cos(angle), Math.sin(angle)], radius, strength, quadVao);
+      this._fluidField.injectImpulse(position, [Math.cos(angle), Math.sin(angle)], radius, strength);
     }
   }
 }

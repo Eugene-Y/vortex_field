@@ -1,7 +1,7 @@
 'use strict';
 
 import { PHYSICS_MODELS } from '../config/SimulationConfig.js';
-import { NavierStokesStep } from './NavierStokesStep.js';
+import { WebGPUNavierStokesStep } from './WebGPUNavierStokesStep.js';
 
 /**
  * Registry of available physics step implementations.
@@ -9,17 +9,17 @@ import { NavierStokesStep } from './NavierStokesStep.js';
  * The rest of the system is unchanged.
  */
 const REGISTRY = {
-  [PHYSICS_MODELS.NAVIER_STOKES]: NavierStokesStep,
+  [PHYSICS_MODELS.NAVIER_STOKES]: WebGPUNavierStokesStep,
 };
 
 /**
  * Instantiates the physics step for the given model identifier.
- * All models receive the same constructor arguments: (gl, shaderSources).
+ * All models receive the same constructor arguments: (device, canvas, shaderSources).
  */
-export function createPhysicsStep(modelId, gl, shaderSources) {
+export function createPhysicsStep(modelId, device, canvas, shaderSources) {
   const PhysicsStepClass = REGISTRY[modelId];
   if (!PhysicsStepClass) {
     throw new Error(`Unknown physics model: "${modelId}". Registered models: ${Object.keys(REGISTRY).join(', ')}`);
   }
-  return new PhysicsStepClass(gl, shaderSources);
+  return new PhysicsStepClass(device, canvas, shaderSources);
 }

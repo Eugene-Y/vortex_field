@@ -34,11 +34,11 @@ export class MouseInjector {
     window.addEventListener('mouseup',   this._onMouseUp);
   }
 
-  applyPendingInjection(quadVao) {
+  applyPendingInjection() {
     if (!this._pendingStroke) return;
     const { from, to, direction, speedFactor } = this._pendingStroke;
     this._pendingStroke = null;
-    this._injectStroke(from, to, direction, speedFactor, quadVao);
+    this._injectStroke(from, to, direction, speedFactor);
   }
 
   dispose() {
@@ -47,7 +47,7 @@ export class MouseInjector {
     window.removeEventListener('mouseup', this._onMouseUp);
   }
 
-  _injectStroke(from, to, direction, speedFactor, quadVao) {
+  _injectStroke(from, to, direction, speedFactor) {
     const dx = to[0] - from[0];
     const dy = to[1] - from[1];
     const lengthUv = Math.hypot(dx, dy);
@@ -65,7 +65,6 @@ export class MouseInjector {
         position, direction,
         MOUSE_DEFAULTS.impulseRadius,
         strength,
-        quadVao,
       );
     }
   }

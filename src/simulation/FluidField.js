@@ -10,32 +10,34 @@ import { DEFAULT_PHYSICS_MODEL } from '../config/SimulationConfig.js';
  * requires only changing the modelId, not this class.
  */
 export class FluidField {
-  constructor(gl, shaderSources, modelId = DEFAULT_PHYSICS_MODEL) {
-    this._physicsStep = createPhysicsStep(modelId, gl, shaderSources);
+  constructor(device, canvas, shaderSources, modelId = DEFAULT_PHYSICS_MODEL) {
+    this._physicsStep = createPhysicsStep(modelId, device, canvas, shaderSources);
   }
 
   get velocityTexture() {
     return this._physicsStep.velocityTexture;
   }
 
-  get velocityFramebuffer() {
-    return this._physicsStep.velocityFramebuffer;
+  /** Advances the simulation by deltaTime seconds. */
+  step(deltaTime) {
+    this._physicsStep.step(deltaTime);
   }
 
-  step(deltaTime, quadVao) {
-    this._physicsStep.step(deltaTime, quadVao);
+  /** Renders the current velocity field to the canvas. */
+  render() {
+    this._physicsStep.renderToCanvas();
   }
 
-  injectImpulse(position, direction, radius, strength, quadVao) {
-    this._physicsStep.injectImpulse(position, direction, radius, strength, quadVao);
+  injectImpulse(position, direction, radius, strength) {
+    this._physicsStep.injectImpulse(position, direction, radius, strength);
   }
 
-  injectDisk(center, radiusUv, strength, mode, quadVao) {
-    this._physicsStep.injectDisk(center, radiusUv, strength, mode, quadVao);
+  injectDisk(center, radiusUv, strength, mode) {
+    this._physicsStep.injectDisk(center, radiusUv, strength, mode);
   }
 
-  addNoise(strength, seed, quadVao) {
-    this._physicsStep.injectNoise(strength, seed, quadVao);
+  addNoise(strength, seed) {
+    this._physicsStep.injectNoise(strength, seed);
   }
 
   reset() {

@@ -1,7 +1,6 @@
 'use strict';
 
 import { GRID_SIZE, ROTATION_FIELD, ROTATION_REFERENCE_GRID_SIZE, RENDER_DEFAULTS, COLORS, PHYSICS_DEFAULTS } from '../config/SimulationConfig.js';
-import { VelocityBridge } from '../gpu/VelocityBridge.js';
 import { UniformWriter } from '../gpu/UniformWriter.js';
 
 const WORKGROUP_SIZE       = 64;
@@ -10,22 +9,20 @@ const ACCUMULATION_BUFFERS = 16;
 /**
  * Field B — WebGPU implementation.
  *
- * Replaces the WebGL vertex-shader trick with a proper compute pipeline:
- *   1. Upload velocity from WebGL via VelocityBridge (readPixels → writeTexture)
- *   2. Compute pass: N² threads, each iterates j-neighbors in pairRange radius,
+ * Three passes per frame:
+ *   1. Compute pass: N² threads, each iterates j-neighbors in pairRange radius,
  *      accumulates signed ω into one of ACCUMULATION_BUFFERS via fixed-point atomicAdd.
- *   3. Reduce pass: sum K buffers → flat f32 output buffer.
- *   4. Render pass: output buffer → canvas-rotation.
+ *   2. Reduce pass: sum K buffers → flat f32 output buffer.
+ *   3. Render pass: output buffer → canvas-rotation.
  *
- * External interface matches old RotationField:
- *   recomputeFrom(velocityWebGLTexture, velocityFramebuffer)
+ * External interface:
+ *   recomputeFrom(velocityGpuTexture)  — takes current velocity GPUTexture directly
  *   dispose()
  */
 export class WebGPURotationField {
-  constructor(device, gl, canvas, computeShaderSource, reduceShaderSource, renderShaderSource) {
-    this._device  = device;
-    this._gl      = gl;
-    this._canvas  = canvas;
+  constructor(device, canvas, computeShaderSource, reduceShaderSource, renderShaderSource) {
+    this._device   = device;
+    this._canvas   = canvas;
     this._gridSize = GRID_SIZE;
 
     const totalCells = GRID_SIZE * GRID_SIZE;
@@ -33,8 +30,6 @@ export class WebGPURotationField {
     this._context = canvas.getContext('webgpu');
     const format  = navigator.gpu.getPreferredCanvasFormat();
     this._context.configure({ device, format, alphaMode: 'opaque' });
-
-    this._bridge = new VelocityBridge(gl, device, GRID_SIZE);
 
     // K atomic i32 accumulation buffers — cleared each frame.
     this._atomicBuffer = device.createBuffer({
@@ -67,21 +62,18 @@ export class WebGPURotationField {
     this._reducePipeline  = this._buildReducePipeline(reduceShaderSource);
     this._renderPipeline  = this._buildRenderPipeline(renderShaderSource, format);
 
-    this._computeBindGroup = this._buildComputeBindGroup();
-    this._reduceBindGroup  = this._buildReduceBindGroup();
+    // Reduce bind group is stable (doesn't depend on the velocity texture).
+    this._reduceBindGroup = this._buildReduceBindGroup();
 
-    this._writeComputeParams();
     this._writeReduceParams();
     this._writeRenderParams();
   }
 
   /**
-   * Uploads velocity from WebGL, runs compute+reduce+render passes.
+   * Runs compute+reduce+render passes using the supplied velocity GPUTexture.
    * Called once per frame from the main render loop.
    */
-  recomputeFrom(velocityWebGLTexture, velocityFramebuffer) {
-    this._bridge.upload(velocityWebGLTexture, velocityFramebuffer);
-
+  recomputeFrom(velocityGpuTexture) {
     // Re-upload params each frame so slider changes take effect immediately.
     this._writeComputeParams();
     this._writeRenderParams();
@@ -94,9 +86,11 @@ export class WebGPURotationField {
     encoder.clearBuffer(this._outputBuffer);
 
     // Compute pass: accumulate rotation contributions.
+    // Rebuild bind group each frame — velocity texture ping-pong changes which texture is current.
+    const computeBindGroup = this._buildComputeBindGroup(velocityGpuTexture);
     const computePass = encoder.beginComputePass();
     computePass.setPipeline(this._computePipeline);
-    computePass.setBindGroup(0, this._computeBindGroup);
+    computePass.setBindGroup(0, computeBindGroup);
     computePass.dispatchWorkgroups(Math.ceil(this._computeThreadCount() / WORKGROUP_SIZE));
     computePass.end();
 
@@ -126,7 +120,6 @@ export class WebGPURotationField {
   }
 
   dispose() {
-    this._bridge.dispose();
     this._atomicBuffer.destroy();
     this._outputBuffer.destroy();
     this._computeParamsBuffer.destroy();
@@ -164,11 +157,11 @@ export class WebGPURotationField {
     });
   }
 
-  _buildComputeBindGroup() {
+  _buildComputeBindGroup(velocityTexture) {
     return this._device.createBindGroup({
       layout: this._computePipeline.getBindGroupLayout(0),
       entries: [
-        { binding: 0, resource: this._bridge.gpuTexture.createView() },
+        { binding: 0, resource: velocityTexture.createView() },
         { binding: 1, resource: { buffer: this._atomicBuffer } },
         { binding: 2, resource: { buffer: this._computeParamsBuffer } },
       ],
@@ -229,8 +222,7 @@ export class WebGPURotationField {
 
     const mask = this._resolveMaskBox();
 
-    const writer = new UniformWriter(64);
-    writer
+    new UniformWriter(64)
       .u32(this._gridSize)                          // gridSize
       .f32(compensatedScale)                        // accumulationScale
       .f32(ROTATION_FIELD.parallelThreshold)        // parallelThreshold
@@ -246,25 +238,23 @@ export class WebGPURotationField {
       .u32(PHYSICS_DEFAULTS.boundaryMode)           // boundaryMode
       .pad()                                        // pad1
       .pad()                                        // pad2
-      .pad();                                       // pad3
-    this._device.queue.writeBuffer(this._computeParamsBuffer, 0, writer.result());
+      .pad()                                        // pad3
+      .writeBuffer(this._device, this._computeParamsBuffer);
   }
 
   _writeReduceParams() {
     // Field order must match struct ReduceParams in rotation_reduce.wgsl exactly.
-    const writer = new UniformWriter(16);
-    writer
+    new UniformWriter(16)
       .u32(this._gridSize)        // gridSize
       .u32(ACCUMULATION_BUFFERS)  // bufferCount
       .pad()                      // pad
-      .pad();                     // pad
-    this._device.queue.writeBuffer(this._reduceParamsBuffer, 0, writer.result());
+      .pad()                      // pad
+      .writeBuffer(this._device, this._reduceParamsBuffer);
   }
 
   _writeRenderParams() {
     // Field order must match struct RenderParams in rotation_render.wgsl exactly.
-    const writer = new UniformWriter(48);
-    writer
+    new UniformWriter(48)
       .u32(this._gridSize)                       // gridSize
       .f32(RENDER_DEFAULTS.rotationToneMidpoint) // rotationToneMidpoint
       .pad()                                     // pad (vec2f alignment)
@@ -276,7 +266,7 @@ export class WebGPURotationField {
       .f32(COLORS.rotationNegative[0])           // colorNegative.r
       .f32(COLORS.rotationNegative[1])           // colorNegative.g
       .f32(COLORS.rotationNegative[2])           // colorNegative.b
-      .pad();                                    // pad (vec3f → vec4f alignment)
-    this._device.queue.writeBuffer(this._renderParamsBuffer, 0, writer.result());
+      .pad()                                     // pad (vec3f → vec4f alignment)
+      .writeBuffer(this._device, this._renderParamsBuffer);
   }
 }
