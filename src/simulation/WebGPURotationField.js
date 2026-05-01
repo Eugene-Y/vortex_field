@@ -2,6 +2,7 @@
 
 import { GRID_SIZE, ROTATION_FIELD, ROTATION_REFERENCE_GRID_SIZE, RENDER_DEFAULTS, COLORS, PHYSICS_DEFAULTS } from '../config/SimulationConfig.js';
 import { VelocityBridge } from '../gpu/VelocityBridge.js';
+import { UniformWriter } from '../gpu/UniformWriter.js';
 
 const WORKGROUP_SIZE       = 64;
 const ACCUMULATION_BUFFERS = 16;
@@ -217,12 +218,8 @@ export class WebGPURotationField {
   }
 
   _writeComputeParams() {
-    // struct Params: 48 bytes (12 × f32/u32)
-    //   gridSize, accumulationScale, parallelThreshold, pairRange,
-    //   sampleStride, maskOriginX, maskOriginY, maskBoxSize,
-    //   maskCenterX, maskCenterY, maskRadiusSq, useMask
-    //
-    // accumulationScale compensated each frame:
+    // Field order must match struct Params in rotation_compute.wgsl exactly.
+    // accumulationScale is compensated each frame:
     //   × sampleStride²      — stride S reduces contributing pairs by S²
     //   × gridSize / refGrid — larger grids have longer arms → omega ∝ 1/N
     const stride = ROTATION_FIELD.sampleStride;
@@ -232,52 +229,54 @@ export class WebGPURotationField {
 
     const mask = this._resolveMaskBox();
 
-    const data = new ArrayBuffer(64);
-    const u32  = new Uint32Array(data);
-    const f32  = new Float32Array(data);
-    u32[0]  = this._gridSize;
-    f32[1]  = compensatedScale;
-    f32[2]  = ROTATION_FIELD.parallelThreshold;
-    f32[3]  = ROTATION_FIELD.pairRange;
-    u32[4]  = stride;
-    u32[5]  = mask.active ? mask.originX  : 0;
-    u32[6]  = mask.active ? mask.originY  : 0;
-    u32[7]  = mask.active ? mask.boxSize  : 0;
-    f32[8]  = mask.active ? mask.centerX  : 0;
-    f32[9]  = mask.active ? mask.centerY  : 0;
-    f32[10] = mask.active ? mask.radiusSq : 0;
-    u32[11] = mask.active ? 1 : 0;
-    u32[12] = PHYSICS_DEFAULTS.boundaryMode;
-    // u32[13..15] padding
-    this._device.queue.writeBuffer(this._computeParamsBuffer, 0, data);
+    const writer = new UniformWriter(64);
+    writer
+      .u32(this._gridSize)                          // gridSize
+      .f32(compensatedScale)                        // accumulationScale
+      .f32(ROTATION_FIELD.parallelThreshold)        // parallelThreshold
+      .f32(ROTATION_FIELD.pairRange)                // pairRange
+      .u32(stride)                                  // sampleStride
+      .u32(mask.active ? mask.originX  : 0)         // maskOriginX
+      .u32(mask.active ? mask.originY  : 0)         // maskOriginY
+      .u32(mask.active ? mask.boxSize  : 0)         // maskBoxSize
+      .f32(mask.active ? mask.centerX  : 0)         // maskCenterX
+      .f32(mask.active ? mask.centerY  : 0)         // maskCenterY
+      .f32(mask.active ? mask.radiusSq : 0)         // maskRadiusSq
+      .u32(mask.active ? 1 : 0)                     // useMask
+      .u32(PHYSICS_DEFAULTS.boundaryMode)           // boundaryMode
+      .pad()                                        // pad1
+      .pad()                                        // pad2
+      .pad();                                       // pad3
+    this._device.queue.writeBuffer(this._computeParamsBuffer, 0, writer.result());
   }
 
   _writeReduceParams() {
-    // struct ReduceParams: gridSize(u32), bufferCount(u32), _pad×2 — 16 bytes
-    const data = new ArrayBuffer(16);
-    const u32  = new Uint32Array(data);
-    u32[0] = this._gridSize;
-    u32[1] = ACCUMULATION_BUFFERS;
-    this._device.queue.writeBuffer(this._reduceParamsBuffer, 0, data);
+    // Field order must match struct ReduceParams in rotation_reduce.wgsl exactly.
+    const writer = new UniformWriter(16);
+    writer
+      .u32(this._gridSize)        // gridSize
+      .u32(ACCUMULATION_BUFFERS)  // bufferCount
+      .pad()                      // pad
+      .pad();                     // pad
+    this._device.queue.writeBuffer(this._reduceParamsBuffer, 0, writer.result());
   }
 
   _writeRenderParams() {
-    // struct RenderParams: gridSize(u32), rotationToneMidpoint(f32), _pad(vec2f),
-    //                      colorPositive(vec3f), _pad(f32), colorNegative(vec3f), _pad(f32)
-    // = 48 bytes
-    const data = new ArrayBuffer(48);
-    const u32  = new Uint32Array(data);
-    const f32  = new Float32Array(data);
-    u32[0] = this._gridSize;
-    f32[1] = RENDER_DEFAULTS.rotationToneMidpoint;
-    // pad: f32[2], f32[3]
-    f32[4] = COLORS.rotationPositive[0];
-    f32[5] = COLORS.rotationPositive[1];
-    f32[6] = COLORS.rotationPositive[2];
-    // pad: f32[7]
-    f32[8]  = COLORS.rotationNegative[0];
-    f32[9]  = COLORS.rotationNegative[1];
-    f32[10] = COLORS.rotationNegative[2];
-    this._device.queue.writeBuffer(this._renderParamsBuffer, 0, data);
+    // Field order must match struct RenderParams in rotation_render.wgsl exactly.
+    const writer = new UniformWriter(48);
+    writer
+      .u32(this._gridSize)                       // gridSize
+      .f32(RENDER_DEFAULTS.rotationToneMidpoint) // rotationToneMidpoint
+      .pad()                                     // pad (vec2f alignment)
+      .pad()                                     // pad
+      .f32(COLORS.rotationPositive[0])           // colorPositive.r
+      .f32(COLORS.rotationPositive[1])           // colorPositive.g
+      .f32(COLORS.rotationPositive[2])           // colorPositive.b
+      .pad()                                     // pad (vec3f → vec4f alignment)
+      .f32(COLORS.rotationNegative[0])           // colorNegative.r
+      .f32(COLORS.rotationNegative[1])           // colorNegative.g
+      .f32(COLORS.rotationNegative[2])           // colorNegative.b
+      .pad();                                    // pad (vec3f → vec4f alignment)
+    this._device.queue.writeBuffer(this._renderParamsBuffer, 0, writer.result());
   }
 }
