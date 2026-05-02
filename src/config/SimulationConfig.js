@@ -14,7 +14,8 @@ const DEFAULTS = {
   brushStrength:     100.0,
   brushSpeed:        1.0,
   patternScale:      0.7,
-  pairRange:          0.04,
+  pairDistance:       0.02,
+  distanceDelta:      0.02,
   pressureIterations: 40,
   vorticity:          0.0,
   velBrightness:      50,   // slider position 0–100
@@ -63,7 +64,8 @@ export const PATTERN_DEFAULTS = {
 export const ROTATION_FIELD = {
   parallelThreshold: 0.001,
   accumulationScale: 1.0,
-  pairRange:         _float('pairRange', DEFAULTS.pairRange),
+  pairDistance:      _float('pairDistance', DEFAULTS.pairDistance),
+  distanceDelta:     _float('distanceDelta', DEFAULTS.distanceDelta),
   sampleStride:      _int('sampleStride', 1, 1, 32),
   maskCenter:        (_p.has('maskCx') && _p.has('maskCy'))
     ? [_float('maskCx', 0), _float('maskCy', 0)]
@@ -96,7 +98,8 @@ export function buildShareUrl() {
     brushStrength: MOUSE_DEFAULTS.impulseStrength.toPrecision(3),
     brushSpeed:    MOUSE_DEFAULTS.speedSensitivity.toPrecision(3),
     patternScale:  MOUSE_DEFAULTS.patternScale.toPrecision(3),
-    pairRange:     ROTATION_FIELD.pairRange.toPrecision(3),
+    pairDistance:  ROTATION_FIELD.pairDistance.toPrecision(3),
+    distanceDelta: ROTATION_FIELD.distanceDelta.toPrecision(3),
     sampleStride:  ROTATION_FIELD.sampleStride,
     boundary:      PHYSICS_DEFAULTS.boundaryMode,
     vorticity:      PHYSICS_DEFAULTS.vorticityStrength.toPrecision(3),

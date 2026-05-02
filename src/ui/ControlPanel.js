@@ -24,11 +24,13 @@ export class ControlPanel {
       () => MOUSE_DEFAULTS.patternScale,
       v => { MOUSE_DEFAULTS.patternScale = v; }
     );
-    this._addSymmetricPowerSlider(container, 'Pair range', -1, 1, 0.4,
-      () => ROTATION_FIELD.pairRange,
-      v => { ROTATION_FIELD.pairRange = v; },
-      'Positive: local rotation centers first. Negative: distant pairs first. Higher absolute value → more GPU load.',
-      1000, 4
+    this._addLogSlider(container, 'Pair distance', 0.001, 1.0,
+      () => ROTATION_FIELD.pairDistance,
+      v => { ROTATION_FIELD.pairDistance = v; }
+    );
+    this._addLogSlider(container, 'Distance delta', 0.001, 1.0,
+      () => ROTATION_FIELD.distanceDelta,
+      v => { ROTATION_FIELD.distanceDelta = v; }
     );
     this._addSlider({
       container,
@@ -178,7 +180,9 @@ export class ControlPanel {
       initialSliderValue: Math.max(0, Math.min(100, initialSliderValue)),
       formatValue: sliderValue => {
         const v = Math.exp(logMin + (logMax - logMin) * sliderValue / 100);
-        return v < 0.01 ? v.toExponential(1) : v.toPrecision(3);
+        if (v < 0.001) return v.toExponential(1);
+        if (v < 0.1)   return v.toFixed(3);
+        return v.toPrecision(3);
       },
       onChange: sliderValue => {
         setValue(Math.exp(logMin + (logMax - logMin) * sliderValue / 100));

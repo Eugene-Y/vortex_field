@@ -10,7 +10,7 @@ const ACCUMULATION_BUFFERS = 16;
  * Field B — WebGPU implementation.
  *
  * Three passes per frame:
- *   1. Compute pass: N² threads, each iterates j-neighbors in pairRange radius,
+ *   1. Compute pass: N² threads, each iterates the precomputed annulus offset table,
  *      accumulates signed ω into one of ACCUMULATION_BUFFERS via fixed-point atomicAdd.
  *   2. Reduce pass: sum K buffers → flat f32 output buffer.
  *   3. Render pass: output buffer → canvas-rotation.
@@ -58,6 +58,20 @@ export class WebGPURotationField {
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
+    // Precomputed annulus offset table: flat i32 pairs [dCol, dRow, ...].
+    // Sized for the worst case: entire inscribed circle = π/4 × gridSize² offsets.
+    // gridSize² × 8 bytes is a safe upper bound.
+    this._annulusOffsetBuffer = device.createBuffer({
+      size:  Math.max(8, totalCells * 8),
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+    this._annulusOffsetCount = 0;
+    this._annulusMinRadius   = 0;
+    this._annulusMaxRadius   = 0;
+    // Sentinel values that force a rebuild on the first frame.
+    this._lastPairDistance  = -1;
+    this._lastDistanceDelta = -1;
+
     this._computePipeline = this._buildComputePipeline(computeShaderSource);
     this._reducePipeline  = this._buildReducePipeline(reduceShaderSource);
     this._renderPipeline  = this._buildRenderPipeline(renderShaderSource, format);
@@ -75,6 +89,7 @@ export class WebGPURotationField {
    */
   recomputeFrom(velocityGpuTexture) {
     // Re-upload params each frame so slider changes take effect immediately.
+    // _writeComputeParams also rebuilds the annulus table when pair params change.
     this._writeComputeParams();
     this._writeRenderParams();
 
@@ -125,6 +140,7 @@ export class WebGPURotationField {
     this._computeParamsBuffer.destroy();
     this._reduceParamsBuffer.destroy();
     this._renderParamsBuffer.destroy();
+    this._annulusOffsetBuffer.destroy();
   }
 
   _buildComputePipeline(shaderSource) {
@@ -164,6 +180,7 @@ export class WebGPURotationField {
         { binding: 0, resource: velocityTexture.createView() },
         { binding: 1, resource: { buffer: this._atomicBuffer } },
         { binding: 2, resource: { buffer: this._computeParamsBuffer } },
+        { binding: 3, resource: { buffer: this._annulusOffsetBuffer } },
       ],
     });
   }
@@ -210,7 +227,46 @@ export class WebGPURotationField {
     return { active: true, originX, originY, boxSize, centerX: center[0], centerY: center[1], radiusSq: r * r };
   }
 
+  // Rebuilds the flat i32 annulus offset table on the GPU when pair parameters change.
+  // Stores the resulting count and radius bounds for use in the uniform write.
+  _rebuildAnnulusOffsets(pairDistance, distanceDelta) {
+    const halfGrid    = this._gridSize / 2;
+    const minRadius   = Math.max(0,        (pairDistance - distanceDelta) * halfGrid);
+    const maxRadius   = Math.min(halfGrid, (pairDistance + distanceDelta) * halfGrid);
+    const minRadiusSq = minRadius * minRadius;
+    const maxRadiusSq = maxRadius * maxRadius;
+
+    const flat  = [];
+    const iMax  = Math.ceil(maxRadius);
+    for (let dRow = -iMax; dRow <= iMax; dRow++) {
+      const dRowSq = dRow * dRow;
+      if (dRowSq > maxRadiusSq) continue;
+      for (let dCol = -iMax; dCol <= iMax; dCol++) {
+        const distSq = dRowSq + dCol * dCol;
+        if (distSq >= minRadiusSq && distSq <= maxRadiusSq) {
+          flat.push(dCol, dRow);
+        }
+      }
+    }
+
+    if (flat.length > 0) {
+      this._device.queue.writeBuffer(this._annulusOffsetBuffer, 0, new Int32Array(flat));
+    }
+    this._annulusOffsetCount = flat.length / 2;
+    this._annulusMinRadius   = minRadius;
+    this._annulusMaxRadius   = maxRadius;
+  }
+
   _writeComputeParams() {
+    // Rebuild annulus offset table when pair distance parameters change.
+    const pairDistance  = ROTATION_FIELD.pairDistance;
+    const distanceDelta = ROTATION_FIELD.distanceDelta;
+    if (pairDistance !== this._lastPairDistance || distanceDelta !== this._lastDistanceDelta) {
+      this._rebuildAnnulusOffsets(pairDistance, distanceDelta);
+      this._lastPairDistance  = pairDistance;
+      this._lastDistanceDelta = distanceDelta;
+    }
+
     // Field order must match struct Params in rotation_compute.wgsl exactly.
     // accumulationScale is compensated each frame:
     //   × sampleStride²      — stride S reduces contributing pairs by S²
@@ -226,7 +282,9 @@ export class WebGPURotationField {
       .u32(this._gridSize)                          // gridSize
       .f32(compensatedScale)                        // accumulationScale
       .f32(ROTATION_FIELD.parallelThreshold)        // parallelThreshold
-      .f32(ROTATION_FIELD.pairRange)                // pairRange
+      .u32(this._annulusOffsetCount)                // offsetCount
+      .f32(this._annulusMinRadius)                  // minRadius
+      .f32(this._annulusMaxRadius)                  // maxRadius
       .u32(stride)                                  // sampleStride
       .u32(mask.active ? mask.originX  : 0)         // maskOriginX
       .u32(mask.active ? mask.originY  : 0)         // maskOriginY
@@ -237,8 +295,6 @@ export class WebGPURotationField {
       .u32(mask.active ? 1 : 0)                     // useMask
       .u32(PHYSICS_DEFAULTS.boundaryMode)           // boundaryMode
       .pad()                                        // pad1
-      .pad()                                        // pad2
-      .pad()                                        // pad3
       .writeBuffer(this._device, this._computeParamsBuffer);
   }
 

@@ -1,7 +1,7 @@
 // Compute shader: instantaneous rotation center field accumulation.
 //
-// Each thread handles one cell i and iterates over all cells j within
-// pairRange radius where j > i (unique pairs only, no double-counting).
+// Each thread handles one cell i and iterates over all j-neighbors listed in
+// annulusOffsets (precomputed CPU-side annulus ring, unique pairs only via indexB > indexA).
 //
 // When useMask=1, threads cover only the bounding box of a focus circle
 // (maskBoxSize² threads instead of gridSize²) and both cells must be
@@ -15,24 +15,26 @@ struct Params {
   gridSize:          u32,   // 0
   accumulationScale: f32,   // 4
   parallelThreshold: f32,   // 8
-  pairRange:         f32,   // 12
-  sampleStride:      u32,   // 16
-  maskOriginX:       u32,   // 20
-  maskOriginY:       u32,   // 24
-  maskBoxSize:       u32,   // 28
-  maskCenterX:       f32,   // 32
-  maskCenterY:       f32,   // 36
-  maskRadiusSq:      f32,   // 40
-  useMask:           u32,   // 44
-  boundaryMode:      u32,   // 48  0=wrap 1=absorb 2=reflect
-  pad1:              u32,   // 52
-  pad2:              u32,   // 56
-  pad3:              u32,   // 60
+  offsetCount:       u32,   // 12  entries in annulusOffsets
+  minRadius:         f32,   // 16  annulus inner radius (grid cells) — for mask early-exit
+  maxRadius:         f32,   // 20  annulus outer radius (grid cells) — for mask diameter clamp
+  sampleStride:      u32,   // 24
+  maskOriginX:       u32,   // 28
+  maskOriginY:       u32,   // 32
+  maskBoxSize:       u32,   // 36
+  maskCenterX:       f32,   // 40
+  maskCenterY:       f32,   // 44
+  maskRadiusSq:      f32,   // 48
+  useMask:           u32,   // 52
+  boundaryMode:      u32,   // 56  0=wrap 1=absorb 2=reflect
+  pad1:              u32,   // 60
 }                            // 64 bytes
 
 @group(0) @binding(0) var velocityTexture: texture_2d<f32>;
 @group(0) @binding(1) var<storage, read_write> rotationBuffer: array<atomic<i32>>;
 @group(0) @binding(2) var<uniform> params: Params;
+// Flat i32 array: [dCol0, dRow0, dCol1, dRow1, ...] — precomputed annulus offsets.
+@group(0) @binding(3) var<storage, read> annulusOffsets: array<i32>;
 
 // CAS-based f32 atomic add — no quantization error.
 // Stores f32 bit-pattern in an atomic<i32>; clearBuffer(0) initialises to 0.0 correctly.
@@ -135,86 +137,62 @@ fn computeRotation(
   if (length(velA) < 1e-6) { return; }
   if (colA % i32(params.sampleStride) != 0 || rowA % i32(params.sampleStride) != 0) { return; }
 
-  // Positive pairRange r: pairs within [0,   r·N/2]         — local-first.
-  // Negative pairRange r: pairs within [(1+r)·N/2, N/2]     — distant-first.
-  // Both ±1 include all pairs; near 0 → very few pairs; at 0 → none.
-  let isNegative  = params.pairRange < 0.0;
-  let minRadius   = select(0.0, (1.0 + params.pairRange) * gSize * 0.5, isNegative);
-  let maxRadius   = select(params.pairRange * gSize * 0.5, gSize * 0.5, isNegative);
-  let minRadiusSq = minRadius * minRadius;
-  let maxRadiusSq = maxRadius * maxRadius;
-
-  // When mask is active, both cells lie within the circle so their distance
-  // is at most 2R (the diameter). Clamp the loop range and bail early if
-  // the minimum pair distance exceeds the mask diameter — no valid pairs exist.
-  var iMaxRadius = i32(ceil(maxRadius));
+  // When mask is active, bail early if the annulus inner radius exceeds the mask diameter —
+  // no pair within the mask circle can satisfy the minimum distance constraint.
   if (params.useMask == 1u) {
     let maskDiameter = 2.0 * sqrt(params.maskRadiusSq);
-    if (minRadius > maskDiameter) { return; }
-    iMaxRadius = min(iMaxRadius, i32(ceil(maskDiameter)));
+    if (params.minRadius > maskDiameter) { return; }
   }
 
   let bufferOffset = (workgroupId.x % ACCUMULATION_BUFFERS) * totalCells;
 
-  for (var dRow = -iMaxRadius; dRow <= iMaxRadius; dRow++) {
-    let dRowSq = f32(dRow) * f32(dRow);
-    if (dRowSq > maxRadiusSq) { continue; }
+  // Iterate precomputed annulus offsets — no per-pair distance check needed.
+  for (var k = 0u; k < params.offsetCount; k++) {
+    let dCol = annulusOffsets[k * 2u];
+    let dRow = annulusOffsets[k * 2u + 1u];
 
-    let iOuterCol = i32(sqrt(maxRadiusSq - dRowSq));
-    let iInnerCol = i32(ceil(sqrt(max(0.0, minRadiusSq - dRowSq))));
-
-    for (var wing = 0; wing < 2; wing++) {
-      let dColStart = select(-iOuterCol, max(iInnerCol, 1), wing == 1);
-      let dColEnd   = select(-iInnerCol, iOuterCol,         wing == 1);
-      for (var dCol = dColStart; dCol <= dColEnd; dCol++) {
-        var colB: i32;
-        var rowB: i32;
-        if (params.boundaryMode == 0u) {
-          colB = ((colA + dCol) % i32(params.gridSize) + i32(params.gridSize)) % i32(params.gridSize);
-          rowB = ((rowA + dRow) % i32(params.gridSize) + i32(params.gridSize)) % i32(params.gridSize);
-        } else {
-          colB = colA + dCol;
-          rowB = rowA + dRow;
-          if (colB < 0 || colB >= i32(params.gridSize) ||
-              rowB < 0 || rowB >= i32(params.gridSize)) { continue; }
-        }
-        let indexB = u32(rowB) * params.gridSize + u32(colB);
-
-        if (indexB <= indexA) { continue; }
-
-        // When mask is active, discard pairs where cell B is outside the circle.
-        if (params.useMask == 1u && !insideMaskCircle(colB, rowB)) { continue; }
-
-        let posB     = vec2f(f32(colB), f32(rowB));
-        let pairDisp = pairDisplacement(posA, posB, gSize);
-        let distSq   = dot(pairDisp, pairDisp);
-        if (distSq > maxRadiusSq || distSq < minRadiusSq) { continue; }
-
-        let velB = textureLoad(velocityTexture, vec2i(colB, rowB), 0).xy;
-
-        let center = computeInstantaneousRotationCenter(posA, velA, posB, velB, gSize);
-        if (center.x > 1e37) { continue; }
-
-        // In non-Wrap modes discard centers that fall outside the domain.
-        if (params.boundaryMode != 0u &&
-            (center.x < 0.0 || center.x >= gSize ||
-             center.y < 0.0 || center.y >= gSize)) { continue; }
-
-        let armB = pairDisplacement(center, posB, gSize);
-        if (dot(armB, armB) < 0.01) { continue; }
-
-        // Average ω from both cells — removes asymmetry from indexA<indexB selection.
-        let omegaA = computeAngularVelocity(velA, center, posA, gSize);
-        let omegaB = computeAngularVelocity(velB, center, posB, gSize);
-        let contribution = (omegaA + omegaB) * 0.5 * params.accumulationScale / f32(totalCells);
-
-        let centerCol   = i32(center.x) % i32(params.gridSize);
-        let centerRow   = i32(center.y) % i32(params.gridSize);
-        let targetIndex = u32(centerRow) * params.gridSize + u32(centerCol);
-
-        atomicAddF32(bufferOffset + targetIndex, contribution);
-      }
+    var colB: i32;
+    var rowB: i32;
+    if (params.boundaryMode == 0u) {
+      colB = ((colA + dCol) % i32(params.gridSize) + i32(params.gridSize)) % i32(params.gridSize);
+      rowB = ((rowA + dRow) % i32(params.gridSize) + i32(params.gridSize)) % i32(params.gridSize);
+    } else {
+      colB = colA + dCol;
+      rowB = rowA + dRow;
+      if (colB < 0 || colB >= i32(params.gridSize) ||
+          rowB < 0 || rowB >= i32(params.gridSize)) { continue; }
     }
+    let indexB = u32(rowB) * params.gridSize + u32(colB);
+
+    if (indexB <= indexA) { continue; }
+
+    // When mask is active, discard pairs where cell B is outside the circle.
+    if (params.useMask == 1u && !insideMaskCircle(colB, rowB)) { continue; }
+
+    let posB = vec2f(f32(colB), f32(rowB));
+    let velB = textureLoad(velocityTexture, vec2i(colB, rowB), 0).xy;
+
+    let center = computeInstantaneousRotationCenter(posA, velA, posB, velB, gSize);
+    if (center.x > 1e37) { continue; }
+
+    // In non-Wrap modes discard centers that fall outside the domain.
+    if (params.boundaryMode != 0u &&
+        (center.x < 0.0 || center.x >= gSize ||
+         center.y < 0.0 || center.y >= gSize)) { continue; }
+
+    let armB = pairDisplacement(center, posB, gSize);
+    if (dot(armB, armB) < 0.01) { continue; }
+
+    // Average ω from both cells — removes asymmetry from indexA<indexB selection.
+    let omegaA = computeAngularVelocity(velA, center, posA, gSize);
+    let omegaB = computeAngularVelocity(velB, center, posB, gSize);
+    let contribution = (omegaA + omegaB) * 0.5 * params.accumulationScale / f32(totalCells);
+
+    let centerCol   = i32(center.x) % i32(params.gridSize);
+    let centerRow   = i32(center.y) % i32(params.gridSize);
+    let targetIndex = u32(centerRow) * params.gridSize + u32(centerCol);
+
+    atomicAddF32(bufferOffset + targetIndex, contribution);
   }
 }
 
