@@ -9,17 +9,17 @@ const _str   = (key, def) => _p.has(key) ? _p.get(key) : def;
 const DEFAULTS = {
   gridSize:          256,
   dampingLoss:       1e-7, // = 1 - damping; stored as loss for URL precision
-  simSpeed:          2.0,
+  simSpeed:          1.0,
   brushRadius:       2.0,
   brushStrength:     100.0,
   brushSpeed:        1.0,
   patternScale:      0.7,
-  pairDistance:       0.02,
-  distanceDelta:      0.02,
-  pressureIterations: 40,
-  vorticity:          0.0,
-  velBrightness:      50,   // slider position 0–100
-  rotBrightness:      50,   // slider position 0–100; 50 = midpoint = 1× normalized mean
+  pairDistance:       0.0447,
+  distanceDelta:      0.00302,
+  pressureIterations: 75,
+  vorticity:          0.605,
+  velBrightness:      46,   // slider position 0–100
+  rotBrightness:      55,   // slider position 0–100; 50 = midpoint = 1× normalized mean
 };
 
 const VEL_TONE_BASE     = 30.0;
@@ -50,7 +50,7 @@ export const PHYSICS_DEFAULTS = {
   pressureIterations:   _int('pressureIters', DEFAULTS.pressureIterations, 1, 100),
   simulationSpeed:      _float('simSpeed',     DEFAULTS.simSpeed),
   boundaryMode:         _int('boundary', 0, 0, 2), // 0=wrap 1=absorb 2=reflect
-  vorticityStrength:    _float('vorticity', 0.0),
+  vorticityStrength:    _float('vorticity', DEFAULTS.vorticity),
 };
 
 // Pixels-per-second at which speedSensitivity=1 yields a 1× strength multiplier.
@@ -72,7 +72,7 @@ export const ROTATION_FIELD = {
   accumulationScale: 1.0,
   pairDistance:      _float('pairDistance', DEFAULTS.pairDistance),
   distanceDelta:     _float('distanceDelta', DEFAULTS.distanceDelta),
-  showMask:          _int('showMask', 3, 0, 3),
+  showMask:          _int('showMask', 1, 0, 3),
   sampleStride:      _int('sampleStride', 1, 1, 32),
   autoNormalize:     _int('autoNorm', 1, 0, 1),
   maskCenter:        (_p.has('maskCx') && _p.has('maskCy'))
