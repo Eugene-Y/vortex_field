@@ -4,7 +4,7 @@ import { GRID_SIZE, ROTATION_FIELD, ROTATION_REFERENCE_GRID_SIZE, RENDER_DEFAULT
 import { UniformWriter } from '../gpu/UniformWriter.js';
 
 const WORKGROUP_SIZE       = 64;
-const ACCUMULATION_BUFFERS = 16;
+const ACCUMULATION_BUFFERS = 32;
 
 /**
  * Field B — WebGPU implementation.
