@@ -57,11 +57,11 @@ export class ControlPanel {
     );
     boundaryRow.querySelector('select').style.width = '70px';
     boundaryRow.appendChild(this._createGridSizeInput());
-    this._addLogSlider(container, 'Brush radius', 0.5, 256,
+    const brushRow = this._addLogSlider(container, 'Brush radius', 0.5, 256,
       () => MOUSE_DEFAULTS.impulseRadius,
       v => { MOUSE_DEFAULTS.impulseRadius = v; }
     );
-    this._addLogSlider(container, 'Brush strength', 1, 500,
+    this._appendLogSlider(brushRow, 'Strength', 1, 500,
       () => MOUSE_DEFAULTS.impulseStrength,
       v => { MOUSE_DEFAULTS.impulseStrength = v; }
     );
@@ -185,27 +185,61 @@ export class ControlPanel {
   // Log-scaled slider. getValue/setValue work in the natural value space (what gets stored).
   // Slider center always corresponds to the current default value at construction time.
   _addLogSlider(container, label, min, max, getValue, setValue) {
-    const logMin = Math.log(min);
-    const logMax = Math.log(max);
-    const defaultValue = getValue();
-    const initialSliderValue = Math.round(
-      (Math.log(defaultValue) - logMin) / (logMax - logMin) * 100
-    );
-
-    this._addSlider({
+    return this._addSlider({
       container,
       label,
-      initialSliderValue: Math.max(0, Math.min(100, initialSliderValue)),
-      formatValue: sliderValue => {
-        const v = Math.exp(logMin + (logMax - logMin) * sliderValue / 100);
-        if (v < 0.001) return v.toExponential(1);
-        if (v < 0.1)   return v.toFixed(3);
-        return v.toPrecision(3);
-      },
-      onChange: sliderValue => {
-        setValue(Math.exp(logMin + (logMax - logMin) * sliderValue / 100));
-      },
+      ...this._logSliderOptions(min, max, getValue, setValue),
     });
+  }
+
+  // Appends a log-scaled slider group (label + range + value) to an existing row element.
+  // Use when two sliders share one control-row, e.g. brush radius + strength.
+  _appendLogSlider(row, label, min, max, getValue, setValue) {
+    const { initialSliderValue, formatValue, onChange } = this._logSliderOptions(min, max, getValue, setValue);
+
+    const labelEl = document.createElement('span');
+    labelEl.className = 'control-label';
+    labelEl.textContent = label;
+
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = 0;
+    slider.max = 100;
+    slider.step = 1;
+    slider.value = initialSliderValue;
+
+    const valueEl = document.createElement('span');
+    valueEl.className = 'control-value';
+    valueEl.textContent = formatValue(initialSliderValue);
+
+    slider.addEventListener('input', () => {
+      const v = parseFloat(slider.value);
+      onChange(v);
+      valueEl.textContent = formatValue(v);
+    });
+
+    row.appendChild(labelEl);
+    row.appendChild(slider);
+    row.appendChild(valueEl);
+  }
+
+  _logSliderOptions(min, max, getValue, setValue) {
+    const logMin = Math.log(min);
+    const logMax = Math.log(max);
+    const initialSliderValue = Math.max(0, Math.min(100, Math.round(
+      (Math.log(getValue()) - logMin) / (logMax - logMin) * 100
+    )));
+    const formatValue = sliderValue => {
+      const v = Math.exp(logMin + (logMax - logMin) * sliderValue / 100);
+      if (v < 0.001) return v.toExponential(1);
+      if (v < 0.1)   return v.toFixed(3);
+      return v.toPrecision(3);
+    };
+    return {
+      initialSliderValue,
+      formatValue,
+      onChange: sliderValue => { setValue(Math.exp(logMin + (logMax - logMin) * sliderValue / 100)); },
+    };
   }
 
   _createGridSizeInput() {
