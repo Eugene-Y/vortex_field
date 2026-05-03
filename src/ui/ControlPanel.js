@@ -1,9 +1,9 @@
 'use strict';
 
-import { RENDER_DEFAULTS, BRIGHTNESS_SLIDER_POSITIONS, PHYSICS_DEFAULTS, MOUSE_DEFAULTS, ROTATION_FIELD, VEL_LOG_RANGE, ROT_LOG_RANGE, MOUSE_SPEED_REFERENCE } from '../config/SimulationConfig.js';
+import { RENDER_DEFAULTS, BRIGHTNESS_SLIDER_POSITIONS, PHYSICS_DEFAULTS, MOUSE_DEFAULTS, ROTATION_FIELD, VEL_LOG_RANGE, ROT_DIM_LOG_RANGE, ROT_BRIGHT_LOG_RANGE, MOUSE_SPEED_REFERENCE } from '../config/SimulationConfig.js';
 
 const VEL_TONE_BASE = 30.0;
-const ROT_TONE_BASE = 0.3;
+const ROT_TONE_BASE = 1.0;
 
 const VORTICITY_MAX      = 50.0;
 const VORTICITY_EXPONENT = 2.0;   // >1 gives finer steps near zero
@@ -13,8 +13,9 @@ export class ControlPanel {
     velocityContainer.style.width = `${fieldSize}px`;
     rotationContainer.style.width = `${fieldSize}px`;
 
-    this._addBrightnessSlider(velocityContainer, 'Brightness', RENDER_DEFAULTS, 'velocityToneMidpoint', VEL_TONE_BASE, VEL_LOG_RANGE, BRIGHTNESS_SLIDER_POSITIONS.velocity, 'velocity');
-    this._addBrightnessSlider(rotationContainer, 'Brightness', RENDER_DEFAULTS, 'rotationToneMidpoint', ROT_TONE_BASE, ROT_LOG_RANGE, BRIGHTNESS_SLIDER_POSITIONS.rotation, 'rotation');
+    this._addBrightnessSlider(velocityContainer, 'Brightness', RENDER_DEFAULTS, 'velocityToneMidpoint', VEL_TONE_BASE, VEL_LOG_RANGE, VEL_LOG_RANGE, BRIGHTNESS_SLIDER_POSITIONS.velocity, 'velocity');
+    const rotBrightnessRow = this._addBrightnessSlider(rotationContainer, 'Brightness', RENDER_DEFAULTS, 'rotationToneMidpoint', ROT_TONE_BASE, ROT_DIM_LOG_RANGE, ROT_BRIGHT_LOG_RANGE, BRIGHTNESS_SLIDER_POSITIONS.rotation, 'rotation');
+    this._addAutoNormalizeButton(rotBrightnessRow);
 
     this._buildPhysicsSliders(physicsContainer);
   }
@@ -94,9 +95,10 @@ export class ControlPanel {
     );
   }
 
-  _addBrightnessSlider(container, label, config, key, toneBase, logRange, initialSliderValue, positionKey) {
+  _addBrightnessSlider(container, label, config, key, toneBase, dimLogRange, brightLogRange, initialSliderValue, positionKey) {
     const applyPosition = sliderValue => {
-      config[key] = toneBase * Math.exp(logRange * (50 - sliderValue) / 50);
+      const t = (50 - sliderValue) / 50;
+      config[key] = toneBase * Math.exp((t >= 0 ? dimLogRange : brightLogRange) * t);
       BRIGHTNESS_SLIDER_POSITIONS[positionKey] = sliderValue;
     };
     applyPosition(initialSliderValue);
@@ -107,6 +109,19 @@ export class ControlPanel {
       formatValue: null,
       onChange: applyPosition,
     });
+  }
+
+  _addAutoNormalizeButton(row) {
+    const btn = document.createElement('button');
+    btn.textContent = 'Auto';
+    const applyStyle = () => { btn.style.opacity = ROTATION_FIELD.autoNormalize ? '1' : '0.35'; };
+    applyStyle();
+    btn.addEventListener('click', () => {
+      ROTATION_FIELD.autoNormalize ^= 1;
+      applyStyle();
+      btn.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    row.appendChild(btn);
   }
 
   // Linear slider. getValue/setValue work in the natural value space.

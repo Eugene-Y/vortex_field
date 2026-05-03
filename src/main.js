@@ -40,6 +40,7 @@ async function loadAllShaders() {
     velocityRender,
     rotationCompute,
     rotationReduce,
+    rotationEnergy,
     rotationRender,
   ] = await Promise.all([
     loadShaderSource('src/shaders/velocity_advect.wgsl'),
@@ -54,6 +55,7 @@ async function loadAllShaders() {
     loadShaderSource('src/shaders/velocity_render.wgsl'),
     loadShaderSource('src/shaders/rotation_compute.wgsl'),
     loadShaderSource('src/shaders/rotation_reduce.wgsl'),
+    loadShaderSource('src/shaders/rotation_energy.wgsl'),
     loadShaderSource('src/shaders/rotation_render.wgsl'),
   ]);
 
@@ -73,6 +75,7 @@ async function loadAllShaders() {
     rotation: {
       compute: rotationCompute,
       reduce:  rotationReduce,
+      energy:  rotationEnergy,
       render:  rotationRender,
     },
   };
@@ -118,6 +121,7 @@ async function main() {
     gpuDevice, canvasRotation,
     shaders.rotation.compute,
     shaders.rotation.reduce,
+    shaders.rotation.energy,
     shaders.rotation.render,
   );
 

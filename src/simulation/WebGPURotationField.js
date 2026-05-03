@@ -20,7 +20,7 @@ const ACCUMULATION_BUFFERS = 16;
  *   dispose()
  */
 export class WebGPURotationField {
-  constructor(device, canvas, computeShaderSource, reduceShaderSource, renderShaderSource) {
+  constructor(device, canvas, computeShaderSource, reduceShaderSource, energyShaderSource, renderShaderSource) {
     this._device   = device;
     this._canvas   = canvas;
     this._gridSize = GRID_SIZE;
@@ -41,6 +41,18 @@ export class WebGPURotationField {
     this._outputBuffer = device.createBuffer({
       size:  totalCells * 4,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+
+    // Single f32: EMA of Σ|output[i]|, updated each frame by the energy pass.
+    // Zero-initialized by WebGPU; cold-start logic in the shader handles first frame.
+    this._smoothedEnergyBuffer = device.createBuffer({
+      size:  4,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+
+    this._energyParamsBuffer = device.createBuffer({
+      size:  16,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
     this._computeParamsBuffer = device.createBuffer({
@@ -78,15 +90,24 @@ export class WebGPURotationField {
     this._lastComputeParamSnapshot = null;
     this._hasValidOutput           = false;
 
+    // Compute bind group cache keyed by velocity GPUTexture.
+    // Ping-pong means at most 2 entries. Cleared when annulus buffer is rebuilt.
+    this._computeBindGroupCache = new Map();
+
     this._computePipeline = this._buildComputePipeline(computeShaderSource);
     this._reducePipeline  = this._buildReducePipeline(reduceShaderSource);
+    this._energyPipeline  = this._buildEnergyPipeline(energyShaderSource);
     this._renderPipeline  = this._buildRenderPipeline(renderShaderSource, format);
 
-    // Reduce bind group is stable (doesn't depend on the velocity texture).
+    // Reduce, energy, and render bind groups are stable (don't depend on the velocity texture).
     this._reduceBindGroup = this._buildReduceBindGroup();
+    this._energyBindGroup = this._buildEnergyBindGroup();
+    this._renderBindGroup = this._buildRenderBindGroup();
 
     this._writeReduceParams();
+    this._writeEnergyParams();
     this._writeRenderParams();
+    this._lastRenderParamSnapshot = this._snapshotRenderParams();
   }
 
   /**
@@ -100,7 +121,10 @@ export class WebGPURotationField {
     const velocityChanged      = velocityGeneration !== this._lastVelocityGeneration;
     const computeParamsChanged = this._haveComputeParamsChanged();
 
-    this._writeRenderParams();
+    if (this._haveRenderParamsChanged()) {
+      this._writeRenderParams();
+      this._lastRenderParamSnapshot = this._snapshotRenderParams();
+    }
 
     if (!velocityChanged && !computeParamsChanged && this._hasValidOutput) {
       this._submitRenderPass();
@@ -135,6 +159,16 @@ export class WebGPURotationField {
     reducePass.dispatchWorkgroups(Math.ceil(totalCells / WORKGROUP_SIZE));
     reducePass.end();
 
+    // Energy pass: update smoothed mean absolute energy for auto-brightness.
+    // Skipped when auto-normalization is off — no cost to the disabled feature.
+    if (ROTATION_FIELD.autoNormalize) {
+      const energyPass = encoder.beginComputePass();
+      energyPass.setPipeline(this._energyPipeline);
+      energyPass.setBindGroup(0, this._energyBindGroup);
+      energyPass.dispatchWorkgroups(1);
+      energyPass.end();
+    }
+
     this._submitRenderPassInto(encoder);
     this._device.queue.submit([encoder.finish()]);
   }
@@ -146,7 +180,6 @@ export class WebGPURotationField {
   }
 
   _submitRenderPassInto(encoder) {
-    const renderBindGroup = this._buildRenderBindGroup();
     const renderPass = encoder.beginRenderPass({
       colorAttachments: [{
         view:       this._context.getCurrentTexture().createView(),
@@ -156,7 +189,7 @@ export class WebGPURotationField {
       }],
     });
     renderPass.setPipeline(this._renderPipeline);
-    renderPass.setBindGroup(0, renderBindGroup);
+    renderPass.setBindGroup(0, this._renderBindGroup);
     renderPass.draw(4);
     renderPass.end();
   }
@@ -164,8 +197,10 @@ export class WebGPURotationField {
   dispose() {
     this._atomicBuffer.destroy();
     this._outputBuffer.destroy();
+    this._smoothedEnergyBuffer.destroy();
     this._computeParamsBuffer.destroy();
     this._reduceParamsBuffer.destroy();
+    this._energyParamsBuffer.destroy();
     this._renderParamsBuffer.destroy();
     this._annulusOffsetBuffer.destroy();
   }
@@ -190,6 +225,14 @@ export class WebGPURotationField {
     });
   }
 
+  _buildEnergyPipeline(shaderSource) {
+    const module = this._device.createShaderModule({ code: shaderSource });
+    return this._device.createComputePipeline({
+      layout: 'auto',
+      compute: { module, entryPoint: 'computeSmoothedEnergy' },
+    });
+  }
+
   _buildRenderPipeline(shaderSource, format) {
     const module = this._device.createShaderModule({ code: shaderSource });
     return this._device.createRenderPipeline({
@@ -201,15 +244,20 @@ export class WebGPURotationField {
   }
 
   _buildComputeBindGroup(velocityTexture) {
-    return this._device.createBindGroup({
-      layout: this._computePipeline.getBindGroupLayout(0),
-      entries: [
-        { binding: 0, resource: velocityTexture.createView() },
-        { binding: 1, resource: { buffer: this._atomicBuffer } },
-        { binding: 2, resource: { buffer: this._computeParamsBuffer } },
-        { binding: 3, resource: { buffer: this._annulusOffsetBuffer } },
-      ],
-    });
+    let bindGroup = this._computeBindGroupCache.get(velocityTexture);
+    if (!bindGroup) {
+      bindGroup = this._device.createBindGroup({
+        layout: this._computePipeline.getBindGroupLayout(0),
+        entries: [
+          { binding: 0, resource: velocityTexture.createView() },
+          { binding: 1, resource: { buffer: this._atomicBuffer } },
+          { binding: 2, resource: { buffer: this._computeParamsBuffer } },
+          { binding: 3, resource: { buffer: this._annulusOffsetBuffer } },
+        ],
+      });
+      this._computeBindGroupCache.set(velocityTexture, bindGroup);
+    }
+    return bindGroup;
   }
 
   _buildReduceBindGroup() {
@@ -223,12 +271,24 @@ export class WebGPURotationField {
     });
   }
 
+  _buildEnergyBindGroup() {
+    return this._device.createBindGroup({
+      layout: this._energyPipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: { buffer: this._outputBuffer } },
+        { binding: 1, resource: { buffer: this._smoothedEnergyBuffer } },
+        { binding: 2, resource: { buffer: this._energyParamsBuffer } },
+      ],
+    });
+  }
+
   _buildRenderBindGroup() {
     return this._device.createBindGroup({
       layout: this._renderPipeline.getBindGroupLayout(0),
       entries: [
         { binding: 0, resource: { buffer: this._outputBuffer } },
         { binding: 1, resource: { buffer: this._renderParamsBuffer } },
+        { binding: 2, resource: { buffer: this._smoothedEnergyBuffer } },
       ],
     });
   }
@@ -252,6 +312,20 @@ export class WebGPURotationField {
       maskCenter:    ROTATION_FIELD.maskCenter,
       maskRadius:    ROTATION_FIELD.maskRadius,
     };
+  }
+
+  _snapshotRenderParams() {
+    return {
+      toneMidpoint:  RENDER_DEFAULTS.rotationToneMidpoint,
+      autoNormalize: ROTATION_FIELD.autoNormalize,
+    };
+  }
+
+  _haveRenderParamsChanged() {
+    const prev = this._lastRenderParamSnapshot;
+    if (!prev) return true;
+    return RENDER_DEFAULTS.rotationToneMidpoint !== prev.toneMidpoint ||
+           ROTATION_FIELD.autoNormalize         !== prev.autoNormalize;
   }
 
   _haveComputeParamsChanged() {
@@ -310,6 +384,8 @@ export class WebGPURotationField {
       this._device.queue.writeBuffer(this._annulusOffsetBuffer, 0, new Int32Array(flat));
     }
     this._annulusOffsetCount = flat.length / 2;
+    // Annulus buffer content changed — cached compute bind groups are stale.
+    this._computeBindGroupCache.clear();
     this._annulusMinRadius   = minRadius;
     this._annulusMaxRadius   = maxRadius;
   }
@@ -365,12 +441,22 @@ export class WebGPURotationField {
       .writeBuffer(this._device, this._reduceParamsBuffer);
   }
 
+  _writeEnergyParams() {
+    // Field order must match struct EnergyParams in rotation_energy.wgsl exactly.
+    new UniformWriter(16)
+      .u32(this._gridSize * this._gridSize)  // totalCells
+      .f32(0.02)                             // emaAlpha  (~35-frame half-life at 60 fps)
+      .pad()                                 // pad
+      .pad()                                 // pad
+      .writeBuffer(this._device, this._energyParamsBuffer);
+  }
+
   _writeRenderParams() {
     // Field order must match struct RenderParams in rotation_render.wgsl exactly.
     new UniformWriter(48)
       .u32(this._gridSize)                       // gridSize
       .f32(RENDER_DEFAULTS.rotationToneMidpoint) // rotationToneMidpoint
-      .pad()                                     // pad (vec2f alignment)
+      .u32(ROTATION_FIELD.autoNormalize)         // autoNormalize
       .pad()                                     // pad
       .f32(COLORS.rotationPositive[0])           // colorPositive.r
       .f32(COLORS.rotationPositive[1])           // colorPositive.g

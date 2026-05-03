@@ -19,18 +19,24 @@ const DEFAULTS = {
   pressureIterations: 40,
   vorticity:          0.0,
   velBrightness:      50,   // slider position 0–100
-  rotBrightness:      80,   // slider position 0–100
+  rotBrightness:      50,   // slider position 0–100; 50 = midpoint = 1× normalized mean
 };
 
 const VEL_TONE_BASE     = 30.0;
-const ROT_TONE_BASE     = 0.3;
+// After energy normalization the mean active cell has value ~1.0, so the tone
+// midpoint is expressed relative to that unit-mean scale.
+const ROT_TONE_BASE     = 1.0;
 
 // Reference grid size at which accumulationScale=1 gives calibrated brightness.
 // Compensation multiplies scale by (gridSize / ref) × sampleStride² so brightness
 // stays constant regardless of grid size or stride.
 export const ROTATION_REFERENCE_GRID_SIZE = 100;
 export const VEL_LOG_RANGE = 3;
-export const ROT_LOG_RANGE = Math.log(ROT_TONE_BASE * Math.exp(3) * 200.0 / ROT_TONE_BASE); 
+// Asymmetric log range for the rotation brightness slider.
+// Dim side is compressed (less dead travel in the near-black range).
+// Bright side is extended so the slider reaches 100× brighter than the old symmetric limit.
+export const ROT_DIM_LOG_RANGE    = 3.5;                                        // exp(3.5) ≈ 33  at pos=0
+export const ROT_BRIGHT_LOG_RANGE = Math.log(Math.exp(3) * 200) + Math.log(100); // ≈ 12.2 at pos=100
 
 export const GRID_SIZE = _int('gridSize', DEFAULTS.gridSize, 32, 1024);
 
@@ -68,6 +74,7 @@ export const ROTATION_FIELD = {
   distanceDelta:     _float('distanceDelta', DEFAULTS.distanceDelta),
   showMask:          _int('showMask', 3, 0, 3),
   sampleStride:      _int('sampleStride', 1, 1, 32),
+  autoNormalize:     _int('autoNorm', 1, 0, 1),
   maskCenter:        (_p.has('maskCx') && _p.has('maskCy'))
     ? [_float('maskCx', 0), _float('maskCy', 0)]
     : null,
@@ -77,12 +84,16 @@ export const ROTATION_FIELD = {
 const velBrightnessPos = _int('velBrightness', DEFAULTS.velBrightness, 0, 100);
 const rotBrightnessPos = _int('rotBrightness', DEFAULTS.rotBrightness, 0, 100);
 
-const brightnessToTone = (base, logRange, pos) =>
-  base * Math.exp(logRange * (50 - pos) / 50);
+// t = +1 at pos=0 (dim end), -1 at pos=100 (bright end).
+// dimLogRange and brightLogRange may differ for an asymmetric slider.
+const brightnessToTone = (base, dimLogRange, brightLogRange, pos) => {
+  const t = (50 - pos) / 50;
+  return base * Math.exp((t >= 0 ? dimLogRange : brightLogRange) * t);
+};
 
 export const RENDER_DEFAULTS = {
-  velocityToneMidpoint: brightnessToTone(VEL_TONE_BASE, VEL_LOG_RANGE, velBrightnessPos),
-  rotationToneMidpoint: brightnessToTone(ROT_TONE_BASE, ROT_LOG_RANGE, rotBrightnessPos),
+  velocityToneMidpoint: brightnessToTone(VEL_TONE_BASE, VEL_LOG_RANGE, VEL_LOG_RANGE, velBrightnessPos),
+  rotationToneMidpoint: brightnessToTone(ROT_TONE_BASE, ROT_DIM_LOG_RANGE, ROT_BRIGHT_LOG_RANGE, rotBrightnessPos),
 };
 
 export const BRIGHTNESS_SLIDER_POSITIONS = {
@@ -103,6 +114,7 @@ export function buildShareUrl() {
     distanceDelta: ROTATION_FIELD.distanceDelta.toPrecision(3),
     showMask:      ROTATION_FIELD.showMask,
     sampleStride:  ROTATION_FIELD.sampleStride,
+    autoNorm:      ROTATION_FIELD.autoNormalize,
     boundary:      PHYSICS_DEFAULTS.boundaryMode,
     vorticity:      PHYSICS_DEFAULTS.vorticityStrength.toPrecision(3),
     pressureIters:  PHYSICS_DEFAULTS.pressureIterations,
