@@ -20,8 +20,9 @@ whose grid coordinate corresponds to that center of rotation. Sign encodes direc
 
 The GPU kernel evaluates only unique pairs (`indexA < indexB`) to avoid double-counting.
 Angular velocity ω is computed from both cells independently and averaged, removing
-any asymmetry introduced by the indexA < indexB selection. The interaction can be
-restricted spatially via the `pairRange` parameter.
+any asymmetry introduced by the indexA < indexB selection. The interaction radius is controlled by `pairDistance` (annulus center) and
+`distanceDelta` (annulus half-width), selecting pairs within
+`[pairDistance − distanceDelta, pairDistance + distanceDelta] × gridSize/2` cells.
 
 Pair displacement and center validity are boundary-mode-aware: in Wrap mode the
 shortest torus path is used; in Absorb/Reflect modes the direct vector is used and
@@ -181,8 +182,10 @@ export const MOUSE_DEFAULTS = {
 export const ROTATION_FIELD = {
   parallelThreshold: 0.001,  // below this cross-product magnitude → discard pair
   accumulationScale: 1.0,
-  pairRange:         0.04,   // signed: positive = local-first, negative = distant-first
+  pairDistance:      0.02,   // annulus center as fraction of gridSize/2
+  distanceDelta:     0.02,   // annulus half-width as fraction of gridSize/2
   sampleStride:      1,      // skip cells: stride S samples every S-th cell in each axis
+  showMask:          3,      // bit0=show CCW(positive) bit1=show CW(negative); 3=both
   maskCenter:        null,   // [col, row] grid coords of focus circle center; null = no mask
   maskRadius:        null,   // focus circle radius in grid cells
 };
@@ -207,7 +210,9 @@ export const COLORS = {
 - `_addIntSlider` — linear, integer display
 - `_addSlider` — generic; caller supplies `formatValue` and `onChange` for custom curves
 - `_addSymmetricPowerSlider` — power curve symmetric around center; exponent < 1 gives
-  finer control near center (used for Pair range)
+  finer control near center
+- `_addContributionToggles` — two toggle buttons (CCW / CW) that independently set bits
+  in `ROTATION_FIELD.showMask`; active = full opacity, inactive = 0.35 opacity
 
 Physics sliders appear below Field A. Brightness sliders appear below their respective field.
 
@@ -225,8 +230,12 @@ Current sliders:
 - **Incompressibility (liquid / gas)** — inverted pressure iterations (1–100);
   right = liquid (many iters, incompressible), left = gas (few iters, compressible)
 - **Pattern size** (under Field B) — `MOUSE_DEFAULTS.patternScale`
-- **Pair range** (under Field B) — power-curve symmetric slider, exponent 0.4;
-  positive = local pairs first, negative = distant pairs first
+- **Show contribution** (under Field B) — two toggle buttons CCW / CW; independently
+  enable/disable positive and negative ω contributions via `ROTATION_FIELD.showMask` bit flags
+- **Pair distance** (under Field B) — `ROTATION_FIELD.pairDistance` (log, 0.001–1);
+  center of the annulus as fraction of gridSize/2
+- **Distance delta** (under Field B) — `ROTATION_FIELD.distanceDelta` (log, 0.001–1);
+  half-width of the annulus; pairs included in `[distance − delta, distance + delta] × gridSize/2`
 - **Sample stride** (under Field B) — powers of 2 (1, 2, 4, 8, 16, 32); skips cells in both
   axes, reducing computation by stride²; brightness auto-compensated
 
@@ -349,12 +358,15 @@ Reads velocity directly from the GPUTexture exposed by `FluidField.velocityTextu
 no CPU round-trip. The pipeline has three passes per frame in one encoder:
 
 1. **Compute pass** (`rotation_compute.wgsl`) — N² threads (one per cell i), each
-   iterates over cell j neighbors within `pairRange` radius where `j > i`. For each
+   iterates the precomputed annulus offset table (flat i32 buffer of `[dCol, dRow]` pairs,
+   built CPU-side when `pairDistance`/`distanceDelta` change, uploaded once). No per-pair
+   distance check in the shader — every entry is guaranteed to lie in the annulus. For each
    valid pair the instantaneous rotation center is computed and ω averaged from both
    cells is accumulated into one of K=16 atomic i32 accumulation buffers selected by
    `workgroupId % K`, reducing CAS contention K-fold. Accumulation uses a CAS-based
    f32 atomic add (bit-cast through i32; `clearBuffer(0)` initialises correctly since
-   0x00000000 is 0.0 in IEEE 754).
+   0x00000000 is 0.0 in IEEE 754). `showMask` bit flags filter contributions by sign
+   (bit0=CCW/positive, bit1=CW/negative) before accumulation.
 
    When the focus mask is active, threads cover only the bounding box of the circle
    (O(R²) instead of O(N²)), and pairs where cell B or the center is outside the
@@ -368,6 +380,13 @@ no CPU round-trip. The pipeline has three passes per frame in one encoder:
 
 The compute bind group is rebuilt each frame (takes the current velocity GPUTexture
 view) — cheap since `getBindGroupLayout` is not a GPU operation.
+
+**Output cache:** when the simulation is paused and only render params changed (e.g.
+brightness slider), `recomputeFrom()` skips compute+reduce and re-runs only the render
+pass from the cached `_outputBuffer`. Detection uses `FluidField.stepGeneration` (an
+integer incremented on every `step()` call) to identify velocity changes reliably —
+texture reference identity is not used because the ping-pong swap count per step can
+be even, causing the same texture object to appear on successive frames.
 
 ## Extensibility Requirements
 
@@ -402,20 +421,19 @@ The code must be written so the following changes require minimal surgery:
 
 ## Pair Interaction Range
 
-`ROTATION_FIELD.pairRange` (slider "Pair range" under Field B, range −1 to +1) limits
-which pairs contribute to Field B.
+`ROTATION_FIELD.pairDistance` and `ROTATION_FIELD.distanceDelta` together define an
+annulus of pair distances that contribute to Field B. Both are fractions of `gridSize/2`.
 
-- **Positive** values include pairs within `pairRange × gridSize / 2` distance — local first.
-- **Negative** values include pairs BEYOND `|pairRange| × gridSize / 2` — distant first.
-- At **0** the field goes dark (no contributing pairs).
-- At **±1** all pairs within the inscribed circle contribute (corner pairs excluded at all
-  values — they exceed `gridSize/2` on the periodic torus, ≈22% of all pairs).
+- **pairDistance** — center of the annulus (log slider, 0.001–1).
+- **distanceDelta** — half-width of the annulus (log slider, 0.001–1).
+- Pairs are included when their distance falls in `[pairDistance − distanceDelta, pairDistance + distanceDelta] × gridSize/2`.
+- `distanceDelta ≥ pairDistance` makes the inner radius clamp to 0 (pure disk, no hole).
 
-The slider uses a symmetric power curve (exponent 0.4) for finer control near zero.
-
-The compute shader translates pairRange into `[minRadius, maxRadius]` bounds and loops
-only over the annulus. Higher `|pairRange|` = more work per thread; lower values = fewer
-neighbor iterations.
+The annulus is precomputed CPU-side (`_rebuildAnnulusOffsets`) whenever either parameter
+changes and uploaded as a flat `i32` storage buffer (`[dCol0, dRow0, dCol1, dRow1, ...]`).
+The shader iterates this list directly — no distance check per pair, no bounding-box scan.
+The buffer is sized at `gridSize² × 8` bytes (safe upper bound; worst case ≈ 51k entries
+for a full inscribed disk at `gridSize=256`).
 
 **Sample stride** reduces computation further: stride S samples every S-th cell in each
 axis, reducing contributing pairs by S². Field B brightness is auto-compensated by
@@ -429,9 +447,9 @@ diffusion. The `dt` slider (`simulationSpeed`) qualitatively changes the flow re
 is the most meaningful control for flow character.
 
 **Field B GPU load scales with N².** At gridSize=256 the compute shader dispatches 65536
-threads, each iterating up to O(N) neighbors. Use `pairRange` to restrict the interaction
-radius and `sampleStride` to sub-sample the grid. The focus mask further reduces dispatch
-to O(R²) for the selected region.
+threads, each iterating the precomputed annulus offset list. Use `pairDistance`/`distanceDelta`
+to control annulus size and `sampleStride` to sub-sample the grid. The focus mask further
+reduces dispatch to O(R²) for the selected region.
 
 **CFL instability at very high impulse strength.** Semi-Lagrangian advection requires
 `velocity × dt / gridSize < 1` per cell. At extreme strength values the condition is

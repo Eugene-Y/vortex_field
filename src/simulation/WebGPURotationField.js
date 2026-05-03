@@ -248,6 +248,7 @@ export class WebGPURotationField {
       distanceDelta: ROTATION_FIELD.distanceDelta,
       sampleStride:  ROTATION_FIELD.sampleStride,
       boundaryMode:  PHYSICS_DEFAULTS.boundaryMode,
+      showMask:      ROTATION_FIELD.showMask,
       maskCenter:    ROTATION_FIELD.maskCenter,
       maskRadius:    ROTATION_FIELD.maskRadius,
     };
@@ -261,6 +262,7 @@ export class WebGPURotationField {
            curr.distanceDelta !== prev.distanceDelta ||
            curr.sampleStride  !== prev.sampleStride  ||
            curr.boundaryMode  !== prev.boundaryMode  ||
+           curr.showMask      !== prev.showMask      ||
            curr.maskCenter    !== prev.maskCenter     ||
            curr.maskRadius    !== prev.maskRadius;
   }
@@ -346,7 +348,7 @@ export class WebGPURotationField {
       .f32(mask.active ? mask.radiusSq : 0)         // maskRadiusSq
       .u32(mask.active ? 1 : 0)                     // useMask
       .u32(PHYSICS_DEFAULTS.boundaryMode)           // boundaryMode
-      .pad()                                        // pad1
+      .u32(ROTATION_FIELD.showMask)                // showMask
       .writeBuffer(this._device, this._computeParamsBuffer);
   }
 

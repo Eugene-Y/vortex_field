@@ -27,7 +27,7 @@ struct Params {
   maskRadiusSq:      f32,   // 48
   useMask:           u32,   // 52
   boundaryMode:      u32,   // 56  0=wrap 1=absorb 2=reflect
-  pad1:              u32,   // 60
+  showMask:          u32,   // 60  bit0=show CCW(positive) bit1=show CW(negative); default=3
 }                            // 64 bytes
 
 @group(0) @binding(0) var velocityTexture: texture_2d<f32>;
@@ -187,6 +187,10 @@ fn computeRotation(
     let omegaA = computeAngularVelocity(velA, center, posA, gSize);
     let omegaB = computeAngularVelocity(velB, center, posB, gSize);
     let contribution = (omegaA + omegaB) * 0.5 * params.accumulationScale / f32(totalCells);
+
+    // showMask bit0=CCW(positive) bit1=CW(negative). Skip contribution if its sign is hidden.
+    if ((params.showMask & 1u) == 0u && contribution > 0.0) { continue; }
+    if ((params.showMask & 2u) == 0u && contribution < 0.0) { continue; }
 
     let centerCol   = i32(center.x) % i32(params.gridSize);
     let centerRow   = i32(center.y) % i32(params.gridSize);

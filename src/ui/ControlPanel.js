@@ -24,6 +24,7 @@ export class ControlPanel {
       () => MOUSE_DEFAULTS.patternScale,
       v => { MOUSE_DEFAULTS.patternScale = v; }
     );
+    this._addContributionToggles(container);
     this._addLogSlider(container, 'Pair distance', 0.001, 1.0,
       () => ROTATION_FIELD.pairDistance,
       v => { ROTATION_FIELD.pairDistance = v; }
@@ -206,6 +207,41 @@ export class ControlPanel {
     fragment.appendChild(label);
     fragment.appendChild(input);
     return fragment;
+  }
+
+  _addContributionToggles(container) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'control-row';
+
+    const label = document.createElement('span');
+    label.className = 'control-label';
+    label.textContent = 'Show contribution';
+    wrapper.appendChild(label);
+
+    const group = document.createElement('div');
+    group.style.cssText = 'display:flex;gap:4px';
+
+    const applyStyle = (btn, active) => {
+      btn.style.opacity = active ? '1' : '0.35';
+    };
+
+    const makeBit = (bit, text) => {
+      const btn = document.createElement('button');
+      btn.textContent = text;
+      const active = () => !!(ROTATION_FIELD.showMask & bit);
+      applyStyle(btn, active());
+      btn.addEventListener('click', () => {
+        ROTATION_FIELD.showMask ^= bit;
+        applyStyle(btn, active());
+        btn.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      return btn;
+    };
+
+    group.appendChild(makeBit(1, 'CCW'));
+    group.appendChild(makeBit(2, 'CW'));
+    wrapper.appendChild(group);
+    container.appendChild(wrapper);
   }
 
   _addSelect(container, label, options, getValue, setValue) {

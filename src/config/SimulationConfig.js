@@ -66,6 +66,7 @@ export const ROTATION_FIELD = {
   accumulationScale: 1.0,
   pairDistance:      _float('pairDistance', DEFAULTS.pairDistance),
   distanceDelta:     _float('distanceDelta', DEFAULTS.distanceDelta),
+  showMask:          _int('showMask', 3, 0, 3),
   sampleStride:      _int('sampleStride', 1, 1, 32),
   maskCenter:        (_p.has('maskCx') && _p.has('maskCy'))
     ? [_float('maskCx', 0), _float('maskCy', 0)]
@@ -100,6 +101,7 @@ export function buildShareUrl() {
     patternScale:  MOUSE_DEFAULTS.patternScale.toPrecision(3),
     pairDistance:  ROTATION_FIELD.pairDistance.toPrecision(3),
     distanceDelta: ROTATION_FIELD.distanceDelta.toPrecision(3),
+    showMask:      ROTATION_FIELD.showMask,
     sampleStride:  ROTATION_FIELD.sampleStride,
     boundary:      PHYSICS_DEFAULTS.boundaryMode,
     vorticity:      PHYSICS_DEFAULTS.vorticityStrength.toPrecision(3),
