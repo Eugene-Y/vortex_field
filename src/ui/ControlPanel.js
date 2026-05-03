@@ -19,8 +19,9 @@ export class ControlPanel {
     this._buildPhysicsSliders(physicsContainer);
   }
 
+  // Returns the pattern-size row so PatternInjector can append the inject dropdown to it.
   addRotationSliders(container) {
-    this._addLinearSlider(container, 'Pattern size', 0, 1,
+    const patternRow = this._addLinearSlider(container, 'Pattern size', 0, 1,
       () => MOUSE_DEFAULTS.patternScale,
       v => { MOUSE_DEFAULTS.patternScale = v; }
     );
@@ -41,6 +42,7 @@ export class ControlPanel {
       formatValue: v => String(2 ** Math.round(v)),
       onChange: v => { ROTATION_FIELD.sampleStride = 2 ** Math.round(v); },
     });
+    return patternRow;
   }
 
   _buildPhysicsSliders(container) {
@@ -98,7 +100,7 @@ export class ControlPanel {
       BRIGHTNESS_SLIDER_POSITIONS[positionKey] = sliderValue;
     };
     applyPosition(initialSliderValue);
-    this._addSlider({
+    return this._addSlider({
       container,
       label,
       initialSliderValue,
@@ -151,7 +153,7 @@ export class ControlPanel {
     const defaultValue = getValue();
     const initialSliderValue = Math.round((defaultValue - min) / (max - min) * 100);
 
-    this._addSlider({
+    return this._addSlider({
       container,
       label,
       initialSliderValue: Math.max(0, Math.min(100, initialSliderValue)),
@@ -305,5 +307,6 @@ export class ControlPanel {
       hintEl.textContent = hint;
       container.appendChild(hintEl);
     }
+    return wrapper;
   }
 }

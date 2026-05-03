@@ -133,13 +133,14 @@ async function main() {
     DISPLAY_GAP,
   );
 
+  // addRotationSliders must run first — it creates the pattern-size row that
+  // PatternInjector appends the inject dropdown to.
+  const patternSizeRow = controlPanel.addRotationSliders(rotationControls);
   const patternInjector = new PatternInjector(
     canvasMain, fluidField, CANVAS_FIELD_SIZE, DISPLAY_GAP,
-    rotationControls, canvasRotation,
+    patternSizeRow, canvasRotation,
   );
   const focusMask = new FocusMaskInteractor(canvasRotation, canvasMain);
-
-  controlPanel.addRotationSliders(rotationControls);
   patternInjector.queueInitialInjection([0.5, 0.5]);
 
   let animationFrameId = null;

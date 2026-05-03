@@ -50,14 +50,14 @@ function stepsForUvLength(uvLength, radiusInCells) {
 }
 
 export class PatternInjector {
-  constructor(canvasVelocity, fluidField, fieldSize, displayGap, dropdownContainer, canvasRotation) {
+  constructor(canvasVelocity, fluidField, fieldSize, displayGap, patternSizeRow, canvasRotation) {
     this._canvas         = canvasVelocity;
     this._canvasRotation = canvasRotation || canvasVelocity;
     this._fluidField     = fluidField;
     this._fieldSize      = fieldSize;
     this._displayGap     = displayGap;
     this._pending        = null;
-    this._select         = this._buildDropdown(dropdownContainer);
+    this._select         = this._buildDropdown(patternSizeRow);
 
     this._onDblClick = this._onDblClick.bind(this);
     this._canvasRotation.addEventListener('dblclick', this._onDblClick);
@@ -84,10 +84,8 @@ export class PatternInjector {
     this._canvasRotation.removeEventListener('dblclick', this._onDblClick);
   }
 
-  _buildDropdown(container) {
-    const wrapper = document.createElement('div');
-    wrapper.className = 'control-row';
-
+  // Appends the inject label + select to an existing control row.
+  _buildDropdown(patternSizeRow) {
     const label = document.createElement('span');
     label.className = 'control-label';
     label.textContent = 'Inject';
@@ -104,9 +102,8 @@ export class PatternInjector {
 
     select.addEventListener('input', () => { PATTERN_DEFAULTS.pattern = select.value; });
 
-    wrapper.appendChild(label);
-    wrapper.appendChild(select);
-    container.appendChild(wrapper);
+    patternSizeRow.appendChild(label);
+    patternSizeRow.appendChild(select);
     return select;
   }
 
