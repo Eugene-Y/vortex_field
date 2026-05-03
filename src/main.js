@@ -142,7 +142,6 @@ async function main() {
   controlPanel.addRotationSliders(rotationControls);
   patternInjector.queueInitialInjection([0.5, 0.5]);
 
-  let previousTime     = performance.now();
   let animationFrameId = null;
   let paused           = false;
 
@@ -152,10 +151,10 @@ async function main() {
     focusMask.updateOverlay();
   }
 
-  function renderFrame(currentTime) {
-    const baseDeltaTime = Math.min((currentTime - previousTime) / 1000, 0.033);
-    const deltaTime     = baseDeltaTime * PHYSICS_DEFAULTS.simulationSpeed;
-    previousTime = currentTime;
+  function renderFrame() {
+    // Fixed physics step decoupled from wall-clock time: GPU stalls from heavy
+    // Field B compute cannot inflate deltaTime and inject physics spikes into Field A.
+    const deltaTime = (1 / 60) * PHYSICS_DEFAULTS.simulationSpeed;
 
     mouseInjector.applyPendingInjection();
     patternInjector.applyPendingPattern();
@@ -172,7 +171,6 @@ async function main() {
   }
 
   function startLoop() {
-    previousTime     = performance.now();
     animationFrameId = requestAnimationFrame(renderFrame);
   }
 
