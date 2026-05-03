@@ -148,7 +148,7 @@ async function main() {
 
   function renderFields() {
     fluidField.render();
-    rotationField.recomputeFrom(fluidField.velocityTexture);
+    rotationField.recomputeFrom(fluidField.velocityTexture, fluidField.stepGeneration);
     focusMask.updateOverlay();
   }
 

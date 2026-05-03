@@ -11,16 +11,24 @@ import { DEFAULT_PHYSICS_MODEL } from '../config/SimulationConfig.js';
  */
 export class FluidField {
   constructor(device, canvas, shaderSources, modelId = DEFAULT_PHYSICS_MODEL) {
-    this._physicsStep = createPhysicsStep(modelId, device, canvas, shaderSources);
+    this._physicsStep    = createPhysicsStep(modelId, device, canvas, shaderSources);
+    this._stepGeneration = 0;
   }
 
   get velocityTexture() {
     return this._physicsStep.velocityTexture;
   }
 
+  // Increments every step() — lets consumers detect whether velocity changed
+  // without relying on texture reference identity (ping-pong swap count may be even).
+  get stepGeneration() {
+    return this._stepGeneration;
+  }
+
   /** Advances the simulation by deltaTime seconds. */
   step(deltaTime) {
     this._physicsStep.step(deltaTime);
+    this._stepGeneration++;
   }
 
   /** Renders the current velocity field to the canvas. */

@@ -72,6 +72,12 @@ export class WebGPURotationField {
     this._lastPairDistance  = -1;
     this._lastDistanceDelta = -1;
 
+    // Output cache: tracks whether the output buffer reflects current velocity + compute params.
+    // Allows skipping compute+reduce when only render params (brightness) change.
+    this._lastVelocityGeneration   = -1;
+    this._lastComputeParamSnapshot = null;
+    this._hasValidOutput           = false;
+
     this._computePipeline = this._buildComputePipeline(computeShaderSource);
     this._reducePipeline  = this._buildReducePipeline(reduceShaderSource);
     this._renderPipeline  = this._buildRenderPipeline(renderShaderSource, format);
@@ -85,16 +91,29 @@ export class WebGPURotationField {
 
   /**
    * Runs compute+reduce+render passes using the supplied velocity GPUTexture.
+   * Skips compute+reduce and re-renders from the cached output buffer when:
+   *   - the velocity texture hasn't changed (simulation is paused), AND
+   *   - no compute-relevant params changed (only brightness was adjusted).
    * Called once per frame from the main render loop.
    */
-  recomputeFrom(velocityGpuTexture) {
-    // Re-upload params each frame so slider changes take effect immediately.
-    // _writeComputeParams also rebuilds the annulus table when pair params change.
-    this._writeComputeParams();
+  recomputeFrom(velocityGpuTexture, velocityGeneration) {
+    const velocityChanged      = velocityGeneration !== this._lastVelocityGeneration;
+    const computeParamsChanged = this._haveComputeParamsChanged();
+
     this._writeRenderParams();
 
-    const totalCells  = this._gridSize * this._gridSize;
-    const encoder     = this._device.createCommandEncoder();
+    if (!velocityChanged && !computeParamsChanged && this._hasValidOutput) {
+      this._submitRenderPass();
+      return;
+    }
+
+    this._writeComputeParams();
+    this._lastVelocityGeneration   = velocityGeneration;
+    this._lastComputeParamSnapshot = this._snapshotComputeParams();
+    this._hasValidOutput           = true;
+
+    const totalCells = this._gridSize * this._gridSize;
+    const encoder    = this._device.createCommandEncoder();
 
     // Clear atomic buffers and output buffer before accumulation.
     encoder.clearBuffer(this._atomicBuffer);
@@ -116,7 +135,17 @@ export class WebGPURotationField {
     reducePass.dispatchWorkgroups(Math.ceil(totalCells / WORKGROUP_SIZE));
     reducePass.end();
 
-    // Render pass: output buffer → canvas.
+    this._submitRenderPassInto(encoder);
+    this._device.queue.submit([encoder.finish()]);
+  }
+
+  _submitRenderPass() {
+    const encoder = this._device.createCommandEncoder();
+    this._submitRenderPassInto(encoder);
+    this._device.queue.submit([encoder.finish()]);
+  }
+
+  _submitRenderPassInto(encoder) {
     const renderBindGroup = this._buildRenderBindGroup();
     const renderPass = encoder.beginRenderPass({
       colorAttachments: [{
@@ -130,8 +159,6 @@ export class WebGPURotationField {
     renderPass.setBindGroup(0, renderBindGroup);
     renderPass.draw(4);
     renderPass.end();
-
-    this._device.queue.submit([encoder.finish()]);
   }
 
   dispose() {
@@ -211,6 +238,31 @@ export class WebGPURotationField {
   _computeThreadCount() {
     const mask = this._resolveMaskBox();
     return mask.active ? mask.boxSize * mask.boxSize : this._gridSize * this._gridSize;
+  }
+
+  // Returns a plain-object snapshot of all params that feed into the compute pass.
+  // Used to detect whether recompute is needed vs render-only (brightness change).
+  _snapshotComputeParams() {
+    return {
+      pairDistance:  ROTATION_FIELD.pairDistance,
+      distanceDelta: ROTATION_FIELD.distanceDelta,
+      sampleStride:  ROTATION_FIELD.sampleStride,
+      boundaryMode:  PHYSICS_DEFAULTS.boundaryMode,
+      maskCenter:    ROTATION_FIELD.maskCenter,
+      maskRadius:    ROTATION_FIELD.maskRadius,
+    };
+  }
+
+  _haveComputeParamsChanged() {
+    const prev = this._lastComputeParamSnapshot;
+    if (!prev) return true;
+    const curr = this._snapshotComputeParams();
+    return curr.pairDistance  !== prev.pairDistance  ||
+           curr.distanceDelta !== prev.distanceDelta ||
+           curr.sampleStride  !== prev.sampleStride  ||
+           curr.boundaryMode  !== prev.boundaryMode  ||
+           curr.maskCenter    !== prev.maskCenter     ||
+           curr.maskRadius    !== prev.maskRadius;
   }
 
   // Returns the mask bounding box in grid-cell space, clamped to the grid.
