@@ -285,13 +285,16 @@ export class WebGPURotationField {
   // Stores the resulting count and radius bounds for use in the uniform write.
   _rebuildAnnulusOffsets(pairDistance, distanceDelta) {
     const halfGrid    = this._gridSize / 2;
-    const minRadius   = Math.max(0,        (pairDistance - distanceDelta) * halfGrid);
-    const maxRadius   = Math.min(halfGrid, (pairDistance + distanceDelta) * halfGrid);
+    const minRadius   = Math.max(0, (pairDistance - distanceDelta) * halfGrid);
+    const maxRadius   = (pairDistance + distanceDelta) * halfGrid;
     const minRadiusSq = minRadius * minRadius;
     const maxRadiusSq = maxRadius * maxRadius;
 
     const flat  = [];
-    const iMax  = Math.ceil(maxRadius);
+    // Loop bound clamped to halfGrid so each torus pair appears at most once.
+    // maxRadiusSq is intentionally NOT clamped — this allows offsets like (128,1)
+    // at dist=128.004 to be included when the annulus extends slightly beyond halfGrid.
+    const iMax  = Math.min(Math.ceil(maxRadius), halfGrid);
     for (let dRow = -iMax; dRow <= iMax; dRow++) {
       const dRowSq = dRow * dRow;
       if (dRowSq > maxRadiusSq) continue;
