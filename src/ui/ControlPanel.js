@@ -69,7 +69,7 @@ export class ControlPanel {
       () => MOUSE_DEFAULTS.speedSensitivity,
       v => { MOUSE_DEFAULTS.speedSensitivity = v; }
     );
-    this._addLogSlider(container, 'dt', 0.0001, 10.0,
+    this._addLogSlider(container, 'dt', 0.1, 10.0,
       () => PHYSICS_DEFAULTS.simulationSpeed,
       v => { PHYSICS_DEFAULTS.simulationSpeed = v; }
     );

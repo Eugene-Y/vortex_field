@@ -167,7 +167,7 @@ export const ROTATION_REFERENCE_GRID_SIZE = 100;
 export const PHYSICS_DEFAULTS = {
   damping:             0.9999999, // per-second velocity retention; applied as pow(damping, dt)
   pressureIterations:  40,        // fewer = more compressible / gas-like
-  simulationSpeed:     2.0,       // dt multiplier; qualitatively changes flow character
+  simulationSpeed:     2.0,       // playback speed multiplier (see render loop for semantics)
   boundaryMode:        0,         // 0=wrap 1=absorb 2=reflect
   vorticityStrength:   0.0,       // vorticity confinement ε; 0 = disabled
 };
@@ -223,7 +223,7 @@ Current sliders:
 - **Brush strength** — `MOUSE_DEFAULTS.impulseStrength` (log, 1–500)
 - **Speed sensitivity** — `MOUSE_DEFAULTS.speedSensitivity` (linear, 0–1); 0 = constant
   strength regardless of mouse speed; 1 = fully speed-scaled
-- **dt** — `PHYSICS_DEFAULTS.simulationSpeed` (log, 0.0001–10); qualitatively changes flow
+- **dt** — `PHYSICS_DEFAULTS.simulationSpeed` (log, 0.1–10); qualitatively changes flow
 - **Damping loss** — `1 - damping` (log, near-zero to 0.2)
 - **Vorticity** — `vorticityStrength` (power-curve, exponent 2, 0–50); re-energises vortices;
   0 = off; power curve gives finer control near zero
@@ -445,6 +445,15 @@ so the display stays calibrated across both parameters.
 **No explicit viscosity slider.** The semi-Lagrangian advection scheme introduces numerical
 diffusion. The `dt` slider (`simulationSpeed`) qualitatively changes the flow regime and
 is the most meaningful control for flow character.
+
+**`simulationSpeed` is not a pure time-scale.** At `speed ≤ 1` the render loop runs one
+physics step per frame with `dt = PHYSICS_DT × speed` (smooth, slight regime shift). At
+`speed > 1` it runs `round(speed)` sub-steps per frame at fixed `PHYSICS_DT = 1/60`
+(correct regime, multiple steps). True time-scaling is not achievable with Jacobi pressure:
+the Jacobi ringing frequency is set by the grid and stencil eigenvalues, not by `dt` — so
+abrupt `dt` changes produce transient oscillations at a fixed grid-dependent frequency
+regardless of the magnitude of the change. A CG or multigrid solver would eliminate this,
+at significant GPU cost (global reductions per iteration).
 
 **Field B GPU load scales with N².** At gridSize=256 the compute shader dispatches 65536
 threads, each iterating the precomputed annulus offset list. Use `pairDistance`/`distanceDelta`

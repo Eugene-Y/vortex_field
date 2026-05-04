@@ -150,6 +150,9 @@ async function main() {
   let animationFrameId = null;
   let paused           = false;
 
+  // Reference physics timestep — one frame at 60 fps.
+  const PHYSICS_DT = 1 / 60;
+
   function renderFields() {
     fluidField.render();
     rotationField.recomputeFrom(fluidField.velocityTexture, fluidField.stepGeneration);
@@ -157,14 +160,22 @@ async function main() {
   }
 
   function renderFrame() {
-    // Fixed physics step decoupled from wall-clock time: GPU stalls from heavy
-    // Field B compute cannot inflate deltaTime and inject physics spikes into Field A.
-    const deltaTime = (1 / 60) * PHYSICS_DEFAULTS.simulationSpeed;
-
+    // Apply input once per display frame — injections are not sub-stepped.
     mouseInjector.applyPendingInjection();
     patternInjector.applyPendingPattern();
 
-    fluidField.step(deltaTime);
+    const speed = PHYSICS_DEFAULTS.simulationSpeed;
+    if (speed <= 1) {
+      // Slow-motion: one step per frame with proportional dt — renders smoothly.
+      // Physics regime shifts slightly (pressure converges better, vorticity scales),
+      // but this is imperceptible versus the alternative of skipping frames entirely.
+      fluidField.step(PHYSICS_DT * speed);
+    } else {
+      // Fast-forward: multiple fixed-dt sub-steps per frame — preserves physics regime.
+      const steps = Math.round(speed);
+      for (let i = 0; i < steps; i++) fluidField.step(PHYSICS_DT);
+    }
+
     renderFields();
 
     animationFrameId = requestAnimationFrame(renderFrame);
