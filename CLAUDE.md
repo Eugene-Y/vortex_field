@@ -242,7 +242,7 @@ Current sliders:
 - **Sample stride** (under Field B) — powers of 2 (1, 2, 4, 8, 16, 32); skips cells in both
   axes, reducing computation by stride²; brightness auto-compensated
 
-**Pattern injection** (`PatternInjector.js` — double-click on Field B, or P with the pointer over it):
+**Pattern injection** (`PatternInjector.js` — double-click on Field B, or P with the pointer over either field):
 A dropdown below Field B selects the injection pattern. Double-clicking or pressing P
 (matched by physical key `KeyP`, so any layout works; ignored with Cmd/Ctrl/Alt, on key
 repeat and while typing in a text field) injects at that UV position in Field A space. Uses current brush radius/strength. Adds to existing
