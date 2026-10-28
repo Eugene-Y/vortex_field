@@ -87,16 +87,101 @@
       white-space: nowrap;
     }
 
-    .control-row input[type=range] {
+    .slider-box {
+      --fill: 50%;
+      position: relative;
       flex: 1;
-      accent-color: #888;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      height: 16px;
+      margin: 1px 0;
+      padding: 0 5px;
+      border: 1px solid #2a2a2a;
+      background: linear-gradient(to right, #262626 var(--fill), #0c0c0c var(--fill));
     }
 
-    .control-value {
+    .slider-box:hover,
+    .slider-box:focus-within {
+      border-color: #444;
+    }
+
+    .slider-box input[type=range] {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      appearance: none;
+      -webkit-appearance: none;
+      background: transparent;
+      cursor: ew-resize;
+      outline: none;
+    }
+
+    .slider-box input[type=range]::-webkit-slider-runnable-track {
+      height: 100%;
+      background: transparent;
+    }
+
+    .slider-box input[type=range]::-moz-range-track {
+      height: 100%;
+      background: transparent;
+    }
+
+    .slider-box input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 2px;
+      height: 100%;
+      background: #888;
+    }
+
+    .slider-box input[type=range]::-moz-range-thumb {
+      width: 2px;
+      height: 100%;
+      border: none;
+      border-radius: 0;
+      background: #888;
+    }
+
+    .slider-label,
+    .slider-value {
+      position: relative;
       font-size: 10px;
-      width: 29px;
-      text-align: right;
-      flex-shrink: 0;
+      letter-spacing: 0.08em;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+
+    .slider-label {
+      text-transform: uppercase;
+    }
+
+    .toggle-button {
+      height: 16px;
+      margin: 1px 0;
+      padding: 0 6px;
+      border: 1px solid #2a2a2a;
+      background: #0c0c0c;
+      color: #555;
+      font-family: monospace;
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+
+    .toggle-button.active {
+      background: #262626;
+      color: #bbb;
+    }
+
+    .toggle-button:hover,
+    .toggle-button:focus-visible {
+      border-color: #444;
+      outline: none;
     }
 
     .control-hint {
@@ -108,19 +193,79 @@
 
     .pattern-select {
       flex: 1;
-      background: #111;
+      min-width: 0;
+      height: 16px;
+      margin: 1px 0;
+      padding: 0 16px 0 5px;
+      appearance: none;
+      -webkit-appearance: none;
+      background: #0c0c0c url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='7' height='4'%3E%3Cpath d='M0 0l3.5 4L7 0z' fill='%23888'/%3E%3C/svg%3E") no-repeat right 5px center;
       color: #888;
-      border: 1px solid #333;
+      border: 1px solid #2a2a2a;
+      border-radius: 0;
       font-family: monospace;
       font-size: 10px;
-      letter-spacing: 0.05em;
-      padding: 1px 3px;
+      letter-spacing: 0.08em;
       cursor: pointer;
     }
 
+    .pattern-select:hover,
     .pattern-select:focus {
       outline: none;
-      border-color: #555;
+      border-color: #444;
+    }
+
+    .pattern-select option {
+      background: #0c0c0c;
+      color: #888;
+    }
+
+    /* Opt-in customizable select: browsers without base-select drop this whole rule and keep the native menu. */
+    .pattern-select,
+    .pattern-select::picker(select) {
+      appearance: base-select;
+    }
+
+    .pattern-select {
+      min-height: 0;
+      align-items: center;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+
+    .pattern-select::picker-icon {
+      display: none;
+    }
+
+    .pattern-select::picker(select) {
+      margin: 1px 0;
+      padding: 0;
+      border: 1px solid #444;
+      background: #0c0c0c;
+    }
+
+    .pattern-select option {
+      padding: 2px 6px;
+      font-family: monospace;
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      cursor: pointer;
+    }
+
+    .pattern-select option::checkmark {
+      display: none;
+    }
+
+    .pattern-select option:checked {
+      background: #262626;
+      color: #bbb;
+    }
+
+    .pattern-select option:hover,
+    .pattern-select option:focus-visible {
+      background: #1a1a1a;
+      color: #bbb;
+      outline: none;
     }
 
     #top-bar {
@@ -131,8 +276,8 @@
     }
 
     #top-bar button {
-      background: none;
-      border: 1px solid #555;
+      background: #0c0c0c;
+      border: 1px solid #2a2a2a;
       color: #888;
       font-family: monospace;
       font-size: 11px;
@@ -143,7 +288,8 @@
     }
 
     #top-bar button:hover {
-      border-color: #888;
+      border-color: #444;
+      background: #262626;
       color: #bbb;
     }
 
@@ -161,21 +307,28 @@
     }
 
     #grid-size-input {
-      background: none;
-      border: 1px solid #555;
+      height: 16px;
+      margin: 1px 0;
+      padding: 0 5px;
+      background: #0c0c0c;
+      border: 1px solid #2a2a2a;
+      border-radius: 0;
       color: #888;
       font-family: monospace;
-      font-size: 11px;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      padding: 2px 6px;
+      font-size: 10px;
+      letter-spacing: 0.08em;
       width: 43px;
       text-align: center;
     }
 
+    #grid-size-input:hover {
+      border-color: #444;
+    }
+
     #grid-size-input:focus {
       outline: none;
-      border-color: #888;
+      border-color: #444;
+      background: #262626;
       color: #bbb;
     }
 

@@ -9,6 +9,8 @@ const DENS_TONE_BASE = 10.0;
 const VORTICITY_MAX      = 50.0;
 const VORTICITY_EXPONENT = 2.0;   // >1 gives finer steps near zero
 
+const PAIR_DISTANCE_SLIDER_STEPS = 1000;
+
 export class ControlPanel {
   constructor(velocityContainer, rotationContainer, physicsContainer, fieldSize, gapSize) {
     velocityContainer.style.width = `${fieldSize}px`;
@@ -33,7 +35,8 @@ export class ControlPanel {
     this._addContributionToggles(container);
     this._addLogSlider(container, 'Pair distance', 0.001, 1.0,
       () => ROTATION_FIELD.pairDistance,
-      v => { ROTATION_FIELD.pairDistance = v; }
+      v => { ROTATION_FIELD.pairDistance = v; },
+      PAIR_DISTANCE_SLIDER_STEPS
     );
     this._addLogSlider(container, 'Distance delta', 0.001, 1.0,
       () => ROTATION_FIELD.distanceDelta,
@@ -51,21 +54,14 @@ export class ControlPanel {
   }
 
   _buildPhysicsSliders(container) {
-    if (GRAVITY_EXPERIMENT) {
-      this._addBrushModeToggles(container);
-      this._addGravityControls(container);
-    }
+    this._addBrushControls(container);
+    this._addBoundaryControls(container);
+    this._addFlowSliders(container);
+    if (GRAVITY_EXPERIMENT) this._addGravityControls(container);
+  }
 
-    const boundaryRow = this._addSelect(container, 'Boundary', [
-      { value: 0, label: 'Wrap' },
-      { value: 1, label: 'Absorb' },
-      { value: 2, label: 'Reflect' },
-    ],
-      () => PHYSICS_DEFAULTS.boundaryMode,
-      v => { PHYSICS_DEFAULTS.boundaryMode = v; }
-    );
-    boundaryRow.querySelector('select').style.width = '70px';
-    boundaryRow.appendChild(this._createGridSizeInput());
+  _addBrushControls(container) {
+    if (GRAVITY_EXPERIMENT) this._addBrushModeToggles(container);
     const brushRow = this._addLogSlider(container, 'Brush radius', 0.5, 256,
       () => MOUSE_DEFAULTS.impulseRadius,
       v => { MOUSE_DEFAULTS.impulseRadius = v; }
@@ -78,12 +74,27 @@ export class ControlPanel {
       () => MOUSE_DEFAULTS.speedSensitivity,
       v => { MOUSE_DEFAULTS.speedSensitivity = v; }
     );
+  }
+
+  _addBoundaryControls(container) {
+    const boundaryRow = this._addSelect(container, 'Boundary', [
+      { value: 0, label: 'Wrap' },
+      { value: 1, label: 'Absorb' },
+      { value: 2, label: 'Reflect' },
+    ],
+      () => PHYSICS_DEFAULTS.boundaryMode,
+      v => { PHYSICS_DEFAULTS.boundaryMode = v; }
+    );
+    boundaryRow.querySelector('select').style.width = '70px';
+    boundaryRow.appendChild(this._createGridSizeInput());
+  }
+
+  _addFlowSliders(container) {
     this._addLogSlider(container, 'dt', 0.1, 10.0,
       () => PHYSICS_DEFAULTS.simulationSpeed,
       v => { PHYSICS_DEFAULTS.simulationSpeed = v; }
     );
-    // Damping slider works in "loss per frame" space (1 - damping) for a clean log scale.
-    // Loss 0.0005 ≈ damping 0.9995 (very slow decay) to 0.2 ≈ damping 0.8 (fast decay).
+    // Works in loss space (1 − damping) so the log scale can resolve retention values just below 1.
     this._addLogSlider(container, 'Damping loss', 0.000000001, 0.2,
       () => 1 - PHYSICS_DEFAULTS.damping,
       v => { PHYSICS_DEFAULTS.damping = 1 - v; }
@@ -116,16 +127,13 @@ export class ControlPanel {
     const group = document.createElement('div');
     group.style.cssText = 'display:flex;gap:4px';
 
-    const applyStyle = (btn, active) => { btn.style.opacity = active ? '1' : '0.35'; };
-
     const makeMode = (mode, text) => {
-      const btn = document.createElement('button');
-      btn.textContent = text;
-      applyStyle(btn, BRUSH.mode === mode);
+      const btn = this._createToggleButton(text);
+      this._showToggleActive(btn, BRUSH.mode === mode);
       btn.addEventListener('click', () => {
         BRUSH.mode = mode;
-        applyStyle(impulseBtn, BRUSH.mode === 'impulse');
-        applyStyle(massBtn,    BRUSH.mode === 'mass');
+        this._showToggleActive(impulseBtn, BRUSH.mode === 'impulse');
+        this._showToggleActive(massBtn,    BRUSH.mode === 'mass');
         btn.dispatchEvent(new Event('input', { bubbles: true }));
       });
       return btn;
@@ -148,13 +156,11 @@ export class ControlPanel {
     label.textContent = 'Gravity';
     wrapper.appendChild(label);
 
-    const btn = document.createElement('button');
-    const applyStyle = () => { btn.style.opacity = GRAVITY.enabled ? '1' : '0.35'; };
-    btn.textContent = 'Enable';
-    applyStyle();
+    const btn = this._createToggleButton('Enable');
+    this._showToggleActive(btn, GRAVITY.enabled);
     btn.addEventListener('click', () => {
       GRAVITY.enabled = !GRAVITY.enabled;
-      applyStyle();
+      this._showToggleActive(btn, GRAVITY.enabled);
       btn.dispatchEvent(new Event('input', { bubbles: true }));
     });
     wrapper.appendChild(btn);
@@ -191,19 +197,16 @@ export class ControlPanel {
   }
 
   _addAutoNormalizeButton(row) {
-    const btn = document.createElement('button');
-    btn.textContent = 'Auto';
-    const applyStyle = () => { btn.style.opacity = ROTATION_FIELD.autoNormalize ? '1' : '0.35'; };
-    applyStyle();
+    const btn = this._createToggleButton('Auto');
+    this._showToggleActive(btn, ROTATION_FIELD.autoNormalize);
     btn.addEventListener('click', () => {
       ROTATION_FIELD.autoNormalize ^= 1;
-      applyStyle();
+      this._showToggleActive(btn, ROTATION_FIELD.autoNormalize);
       btn.dispatchEvent(new Event('input', { bubbles: true }));
     });
     row.appendChild(btn);
   }
 
-  // Linear slider. getValue/setValue work in the natural value space.
   // Power-curve slider symmetric around center (maps to mid of [min,max]).
   // Exponent > 1 gives finer control near center; exponent = 1 is linear.
   _addSymmetricPowerSlider(container, label, min, max, exponent, getValue, setValue, hint = null, steps = 100, decimals = 3) {
@@ -263,61 +266,38 @@ export class ControlPanel {
 
   // Log-scaled slider. getValue/setValue work in the natural value space (what gets stored).
   // Slider center always corresponds to the current default value at construction time.
-  _addLogSlider(container, label, min, max, getValue, setValue) {
+  _addLogSlider(container, label, min, max, getValue, setValue, steps = 100) {
     return this._addSlider({
       container,
       label,
-      ...this._logSliderOptions(min, max, getValue, setValue),
+      ...this._logSliderOptions(min, max, getValue, setValue, steps),
     });
   }
 
-  // Appends a log-scaled slider group (label + range + value) to an existing row element.
   // Use when two sliders share one control-row, e.g. brush radius + strength.
   _appendLogSlider(row, label, min, max, getValue, setValue) {
-    const { initialSliderValue, formatValue, onChange } = this._logSliderOptions(min, max, getValue, setValue);
-
-    const labelEl = document.createElement('span');
-    labelEl.className = 'control-label';
-    labelEl.textContent = label;
-
-    const slider = document.createElement('input');
-    slider.type = 'range';
-    slider.min = 0;
-    slider.max = 100;
-    slider.step = 1;
-    slider.value = initialSliderValue;
-
-    const valueEl = document.createElement('span');
-    valueEl.className = 'control-value';
-    valueEl.textContent = formatValue(initialSliderValue);
-
-    slider.addEventListener('input', () => {
-      const v = parseFloat(slider.value);
-      onChange(v);
-      valueEl.textContent = formatValue(v);
-    });
-
-    row.appendChild(labelEl);
-    row.appendChild(slider);
-    row.appendChild(valueEl);
+    row.appendChild(this._createSliderBox({
+      label,
+      ...this._logSliderOptions(min, max, getValue, setValue),
+    }));
   }
 
-  _logSliderOptions(min, max, getValue, setValue) {
+  _logSliderOptions(min, max, getValue, setValue, steps = 100) {
     const logMin = Math.log(min);
     const logMax = Math.log(max);
-    const initialSliderValue = Math.max(0, Math.min(100, Math.round(
-      (Math.log(getValue()) - logMin) / (logMax - logMin) * 100
+    const sliderValueToNatural = sliderValue => Math.exp(logMin + (logMax - logMin) * sliderValue / steps);
+    const initialSliderValue = Math.max(0, Math.min(steps, Math.round(
+      (Math.log(getValue()) - logMin) / (logMax - logMin) * steps
     )));
     const formatValue = sliderValue => {
-      const v = Math.exp(logMin + (logMax - logMin) * sliderValue / 100);
-      if (v < 0.001) return v.toExponential(1);
-      if (v < 0.1)   return v.toFixed(3);
-      return v.toPrecision(3);
+      const v = sliderValueToNatural(sliderValue);
+      return v < 0.001 ? v.toExponential(1) : v.toPrecision(3);
     };
     return {
       initialSliderValue,
+      steps,
       formatValue,
-      onChange: sliderValue => { setValue(Math.exp(logMin + (logMax - logMin) * sliderValue / 100)); },
+      onChange: sliderValue => { setValue(sliderValueToNatural(sliderValue)); },
     };
   }
 
@@ -351,18 +331,13 @@ export class ControlPanel {
     const group = document.createElement('div');
     group.style.cssText = 'display:flex;gap:4px';
 
-    const applyStyle = (btn, active) => {
-      btn.style.opacity = active ? '1' : '0.35';
-    };
-
     const makeBit = (bit, text) => {
-      const btn = document.createElement('button');
-      btn.textContent = text;
+      const btn = this._createToggleButton(text);
       const active = () => !!(ROTATION_FIELD.showMask & bit);
-      applyStyle(btn, active());
+      this._showToggleActive(btn, active());
       btn.addEventListener('click', () => {
         ROTATION_FIELD.showMask ^= bit;
-        applyStyle(btn, active());
+        this._showToggleActive(btn, active());
         btn.dispatchEvent(new Event('input', { bubbles: true }));
       });
       return btn;
@@ -372,6 +347,17 @@ export class ControlPanel {
     group.appendChild(makeBit(2, 'CW'));
     wrapper.appendChild(group);
     container.appendChild(wrapper);
+  }
+
+  _createToggleButton(text) {
+    const btn = document.createElement('button');
+    btn.className = 'toggle-button';
+    btn.textContent = text;
+    return btn;
+  }
+
+  _showToggleActive(btn, active) {
+    btn.classList.toggle('active', Boolean(active));
   }
 
   _addSelect(container, label, options, getValue, setValue) {
@@ -403,31 +389,7 @@ export class ControlPanel {
   _addSlider({ container, label, initialSliderValue, formatValue, onChange, hint = null, steps = 100 }) {
     const wrapper = document.createElement('div');
     wrapper.className = 'control-row';
-
-    const labelEl = document.createElement('span');
-    labelEl.className = 'control-label';
-    labelEl.textContent = label;
-
-    const slider = document.createElement('input');
-    slider.type = 'range';
-    slider.min = 0;
-    slider.max = steps;
-    slider.step = 1;
-    slider.value = initialSliderValue;
-
-    const valueEl = document.createElement('span');
-    valueEl.className = 'control-value';
-    valueEl.textContent = formatValue ? formatValue(initialSliderValue) : '';
-
-    slider.addEventListener('input', () => {
-      const v = parseFloat(slider.value);
-      onChange(v);
-      if (formatValue) valueEl.textContent = formatValue(v);
-    });
-
-    wrapper.appendChild(labelEl);
-    wrapper.appendChild(slider);
-    if (formatValue) wrapper.appendChild(valueEl);
+    wrapper.appendChild(this._createSliderBox({ label, initialSliderValue, formatValue, onChange, steps }));
     container.appendChild(wrapper);
     if (hint) {
       const hintEl = document.createElement('div');
@@ -436,5 +398,43 @@ export class ControlPanel {
       container.appendChild(hintEl);
     }
     return wrapper;
+  }
+
+  // A rectangle whose whole area is the range input; label and value are drawn on top of it.
+  _createSliderBox({ label, initialSliderValue, formatValue, onChange, steps = 100 }) {
+    const box = document.createElement('div');
+    box.className = 'slider-box';
+
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = 0;
+    slider.max = steps;
+    slider.step = 1;
+    slider.value = initialSliderValue;
+    slider.setAttribute('aria-label', label);
+
+    const labelEl = document.createElement('span');
+    labelEl.className = 'slider-label';
+    labelEl.textContent = label;
+
+    const valueEl = document.createElement('span');
+    valueEl.className = 'slider-value';
+
+    const showSliderValue = sliderValue => {
+      box.style.setProperty('--fill', `${sliderValue / steps * 100}%`);
+      if (formatValue) valueEl.textContent = formatValue(sliderValue);
+    };
+    showSliderValue(initialSliderValue);
+
+    slider.addEventListener('input', () => {
+      const sliderValue = parseFloat(slider.value);
+      onChange(sliderValue);
+      showSliderValue(sliderValue);
+    });
+
+    box.appendChild(slider);
+    box.appendChild(labelEl);
+    if (formatValue) box.appendChild(valueEl);
+    return box;
   }
 }
