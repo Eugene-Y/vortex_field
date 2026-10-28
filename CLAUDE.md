@@ -55,7 +55,7 @@ src/
     WebGPURotationField.js      — Field B: WebGPU compute pipeline (accumulate → reduce → render)
     PhysicsRegistry.js          — maps physics model identifiers to step implementations
   interaction/
-    MouseInjector.js            — translates mouse events into field impulses
+    MouseInjector.js            — translates pointer strokes into field impulses along a smooth curve
     PatternInjector.js          — double-click / P-key injection of velocity patterns on Field B
     FocusMaskInteractor.js      — click/drag on Field B to restrict rotation to a focus circle
     FieldSnapshotSaver.js       — ↓ saves both fields as vortex_a/b_YYYYMMDD_HHMMSS.png
@@ -266,10 +266,15 @@ Current patterns:
 - **Random noise** — per-cell pseudo-random velocity via `velocity_noise.wgsl`
 
 **Mouse injection** (`MouseInjector.js`):
-- `mousedown` on Field A canvas activates injection; clicks on Field B are ignored
-- Between frames, the full stroke segment (prev → current position) is interpolated
-  at `0.75 × brushRadius` step spacing so fast motion leaves no gaps
-- Mouse leaving field bounds resets `_previousPosition` to prevent phantom strokes on re-entry
+- `pointerdown` on Field A canvas starts a stroke; presses on Field B are ignored
+- Every pointer sample is used, including those coalesced between frames
+  (`getCoalescedEvents()`), and the stroke follows a centripetal Catmull–Rom curve through
+  them; each impulse takes its direction from the curve tangent, so slow frames no longer
+  produce polyline corners with direction jumps
+- A segment is queued once the next sample arrives (its end tangent needs it); the last one
+  when the stroke ends. All segments since the previous frame are injected at
+  `0.75 × brushRadius` spacing along the curve
+- Leaving the field ends the stroke, so re-entry does not draw a phantom segment across the gap
 - Impulse strength is speed-scaled: `strength = impulseStrength × (1 − sensitivity + sensitivity × speedFactor)`
   where `speedFactor = pixelsPerSecond / MOUSE_SPEED_REFERENCE`; `speedSensitivity = 0`
   gives constant strength, `= 1` scales fully with mouse velocity
