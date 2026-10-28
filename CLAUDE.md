@@ -60,6 +60,7 @@ src/
     FocusMaskInteractor.js      — click/drag on Field B to restrict rotation to a focus circle
   ui/
     ControlPanel.js             — all DOM slider creation and wiring
+    ControlHintDisplay.js       — shows the hovered/focused control's data-hint in the description area
   gpu/
     WebGPUDevice.js             — WebGPU adapter/device acquisition
     UniformWriter.js            — sequential writer for WebGPU uniform buffers
@@ -414,6 +415,8 @@ The code must be written so the following changes require minimal surgery:
 - UI reads from and writes to config only, never touches simulation internals directly
 - Add sliders via `ControlPanel._addLogSlider()`, `_addLinearSlider()`, `_addIntSlider()`,
   `_addSlider()`, or `_addSymmetricPowerSlider()`
+- Every new control gets a hint: add its text to `CONTROL_HINTS` in `ControlPanel.js` and pass it
+  to the slider helper (it becomes a `data-hint` attribute shown under the fields on hover).
 - Every new control **must** have a corresponding URL parameter: add it to `DEFAULTS`,
   parse it with `_float`/`_int`/`_str` in `PHYSICS_DEFAULTS` / `MOUSE_DEFAULTS` / etc.,
   and serialize it in `buildShareUrl()`. This is required — share URLs must fully

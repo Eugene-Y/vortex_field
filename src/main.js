@@ -5,6 +5,7 @@ import { FluidField }              from './simulation/FluidField.js';
 import { WebGPURotationField }     from './simulation/WebGPURotationField.js';
 import { MouseInjector }           from './interaction/MouseInjector.js';
 import { ControlPanel }            from './ui/ControlPanel.js';
+import { ControlHintDisplay }      from './ui/ControlHintDisplay.js';
 import { PatternInjector }         from './interaction/PatternInjector.js';
 import { FocusMaskInteractor }     from './interaction/FocusMaskInteractor.js';
 import { GRID_SIZE, DISPLAY_SCALE, DISPLAY_GAP, PHYSICS_DEFAULTS, GRAVITY_EXPERIMENT, buildShareUrl } from './config/SimulationConfig.js';
@@ -163,6 +164,10 @@ async function main() {
     patternSizeRow, canvasRotation,
   );
   const focusMask = new FocusMaskInteractor(canvasRotation, canvasMain);
+  new ControlHintDisplay(
+    document.getElementById('page-description'),
+    document.getElementById('control-hint'),
+  );
   patternInjector.queueInitialInjection([0.5, 0.5]);
 
   let animationFrameId = null;

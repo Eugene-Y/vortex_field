@@ -6,6 +6,8 @@ import { MOUSE_DEFAULTS, GRID_SIZE, PATTERN_DEFAULTS, BRUSH } from '../config/Si
 // At 0.75 each Gaussian blob significantly overlaps its neighbours — no visible gaps.
 const INJECTION_STEP_FRACTION = 0.75;
 
+const INJECT_HINT = 'Pattern added to Field A when you double-click Field B. It adds to the current flow.';
+
 const PATTERNS = [
   { value: 'disk-spin',    label: 'Disk — spin'        },
   { value: 'disk-explode', label: 'Disk — explode'     },
@@ -86,6 +88,10 @@ export class PatternInjector {
 
   // Appends the inject label + select to an existing control row.
   _buildDropdown(patternSizeRow) {
+    const group = document.createElement('span');
+    group.className = 'hint-group';
+    group.dataset.hint = INJECT_HINT;
+
     const label = document.createElement('span');
     label.className = 'control-label';
     label.textContent = 'Inject';
@@ -102,8 +108,9 @@ export class PatternInjector {
 
     select.addEventListener('input', () => { PATTERN_DEFAULTS.pattern = select.value; });
 
-    patternSizeRow.appendChild(label);
-    patternSizeRow.appendChild(select);
+    group.appendChild(label);
+    group.appendChild(select);
+    patternSizeRow.appendChild(group);
     return select;
   }
 
