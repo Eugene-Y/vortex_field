@@ -12,10 +12,11 @@ const DRAG_MOVED_THRESHOLD_PX = 5;
  * already-active mask clears it. Escape always clears.
  *
  * The mask radius tracks MOUSE_DEFAULTS.impulseRadius so the brush
- * radius slider controls the focus circle size.
+ * radius slider resizes an active focus circle live.
  *
  * An overlay canvas (Canvas 2D) is created above Field A to display
- * the active circle. Call updateOverlay() each frame.
+ * the active circle. Call syncRadiusWithBrush() before Field B is computed or the
+ * share URL is built, and updateOverlay() after Field B, each frame.
  */
 export class FocusMaskInteractor {
   constructor(fieldBCanvas, fieldACanvas) {
@@ -35,7 +36,10 @@ export class FocusMaskInteractor {
     window.addEventListener('keydown',           this._onKeyDown.bind(this));
   }
 
-  // Must be called each frame so the overlay reflects slider changes to brush radius.
+  syncRadiusWithBrush() {
+    if (ROTATION_FIELD.maskCenter) ROTATION_FIELD.maskRadius = MOUSE_DEFAULTS.impulseRadius;
+  }
+
   updateOverlay() {
     this._drawOverlay();
   }

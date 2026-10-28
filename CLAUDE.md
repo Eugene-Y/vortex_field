@@ -270,6 +270,7 @@ Current patterns:
 
 **Focus mask** (`FocusMaskInteractor.js`):
 - Click or drag on Field B sets a circular focus mask at that grid position
+- The mask radius is the brush radius; changing the brush slider resizes an active mask live
 - While the mask is active, Field B dispatches only the bounding box of the circle
   (O(R²) threads instead of O(N²)); pairs where cell B or the computed center falls
   outside the circle are discarded

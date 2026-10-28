@@ -177,6 +177,7 @@ async function main() {
   const PHYSICS_DT = 1 / 60;
 
   function renderFields() {
+    focusMask.syncRadiusWithBrush();
     fluidField.render();
     rotationField.recomputeFrom(fluidField.velocityTexture, fluidField.stepGeneration);
     focusMask.updateOverlay();
@@ -248,6 +249,7 @@ async function main() {
   });
 
   document.addEventListener('input', () => {
+    focusMask.syncRadiusWithBrush();
     history.replaceState(null, '', buildShareUrl());
     if (paused) renderFields();
   });
