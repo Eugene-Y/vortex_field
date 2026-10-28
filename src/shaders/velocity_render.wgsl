@@ -1,6 +1,6 @@
 // WebGPU render pipeline for Field A (velocity field).
 // Maps velocity magnitude → brightness (Reinhard tonemapping),
-// direction → hue (HSV encoding). Orange/warm = fast, black = still.
+// direction → hue (HSV encoding). Black = still.
 
 struct RenderParams {
   gridSize:             u32,
@@ -49,6 +49,9 @@ fn hsvToRgb(hsv: vec3f) -> vec3f {
 
 fn mapVelocityToColor(velocity: vec2f) -> vec3f {
   let magnitude  = length(velocity);
+  // atan2(0, 0) is undefined (NaN on Apple GPUs); a NaN hue leaks into the blue channel
+  // even at zero brightness, so an exactly still cell must short-circuit to black.
+  if (magnitude == 0.0) { return vec3f(0.0); }
   let brightness = magnitude / (magnitude + params.velocityToneMidpoint);
   let angle      = atan2(velocity.y, velocity.x);
   let hue        = (angle + 3.14159265) / (2.0 * 3.14159265);
