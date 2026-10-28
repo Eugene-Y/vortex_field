@@ -20,18 +20,22 @@ const DEFAULTS = {
   vorticity:          0.605,
   velBrightness:      46,   // slider position 0–100
   rotBrightness:      55,   // slider position 0–100; 50 = midpoint = 1× normalized mean
+  densBrightness:     50,   // slider position 0–100
 };
 
-const VEL_TONE_BASE     = 30.0;
+const VEL_TONE_BASE  = 30.0;
 // After energy normalization the mean active cell has value ~1.0, so the tone
 // midpoint is expressed relative to that unit-mean scale.
-const ROT_TONE_BASE     = 1.0;
+const ROT_TONE_BASE  = 1.0;
+// Density values accumulate from injection; midpoint ~10 gives good default visibility.
+const DENS_TONE_BASE = 10.0;
 
 // Reference grid size at which accumulationScale=1 gives calibrated brightness.
 // Compensation multiplies scale by (gridSize / ref) × sampleStride² so brightness
 // stays constant regardless of grid size or stride.
 export const ROTATION_REFERENCE_GRID_SIZE = 100;
-export const VEL_LOG_RANGE = 3;
+export const VEL_LOG_RANGE  = 3;
+export const DENS_LOG_RANGE = 3;
 // Asymmetric log range for the rotation brightness slider.
 // Dim side is compressed (less dead travel in the near-black range).
 // Bright side is extended so the slider reaches 100× brighter than the old symmetric limit.
@@ -67,6 +71,21 @@ export const PATTERN_DEFAULTS = {
   pattern: _str('pattern', 'disk-spin'),
 };
 
+// The mass/gravity experiment is hidden and inert unless the URL opts in with ?gravityExperiment=1,
+// so a stray gravEnabled/brushMode in a shared link cannot switch it on behind hidden controls.
+export const GRAVITY_EXPERIMENT = _int('gravityExperiment', 0, 0, 1) === 1;
+
+export const BRUSH = {
+  mode: GRAVITY_EXPERIMENT ? _str('brushMode', 'impulse') : 'impulse',  // 'impulse' | 'mass'
+};
+
+export const GRAVITY = {
+  enabled:        GRAVITY_EXPERIMENT && _int('gravEnabled', 0, 0, 1) === 1,
+  strength:       _float('gravStrength', 5.0),
+  iterations:     _int('gravIters', 20, 1, 100),
+  densityDamping: _float('densDamping', 0.999),
+};
+
 export const ROTATION_FIELD = {
   parallelThreshold: 0.001,
   accumulationScale: 1.0,
@@ -81,8 +100,9 @@ export const ROTATION_FIELD = {
   maskRadius:        _p.has('maskR') ? _float('maskR', 2) : null,
 };
 
-const velBrightnessPos = _int('velBrightness', DEFAULTS.velBrightness, 0, 100);
-const rotBrightnessPos = _int('rotBrightness', DEFAULTS.rotBrightness, 0, 100);
+const velBrightnessPos  = _int('velBrightness',  DEFAULTS.velBrightness,  0, 100);
+const rotBrightnessPos  = _int('rotBrightness',  DEFAULTS.rotBrightness,  0, 100);
+const densBrightnessPos = _int('densBrightness', DEFAULTS.densBrightness, 0, 100);
 
 // t = +1 at pos=0 (dim end), -1 at pos=100 (bright end).
 // dimLogRange and brightLogRange may differ for an asymmetric slider.
@@ -92,13 +112,15 @@ const brightnessToTone = (base, dimLogRange, brightLogRange, pos) => {
 };
 
 export const RENDER_DEFAULTS = {
-  velocityToneMidpoint: brightnessToTone(VEL_TONE_BASE, VEL_LOG_RANGE, VEL_LOG_RANGE, velBrightnessPos),
-  rotationToneMidpoint: brightnessToTone(ROT_TONE_BASE, ROT_DIM_LOG_RANGE, ROT_BRIGHT_LOG_RANGE, rotBrightnessPos),
+  velocityToneMidpoint: brightnessToTone(VEL_TONE_BASE,  VEL_LOG_RANGE,      VEL_LOG_RANGE,        velBrightnessPos),
+  rotationToneMidpoint: brightnessToTone(ROT_TONE_BASE,  ROT_DIM_LOG_RANGE,  ROT_BRIGHT_LOG_RANGE, rotBrightnessPos),
+  densityToneMidpoint:  brightnessToTone(DENS_TONE_BASE, DENS_LOG_RANGE,     DENS_LOG_RANGE,       densBrightnessPos),
 };
 
 export const BRIGHTNESS_SLIDER_POSITIONS = {
   velocity: velBrightnessPos,
   rotation: rotBrightnessPos,
+  density:  densBrightnessPos,
 };
 
 export function buildShareUrl() {
@@ -116,12 +138,21 @@ export function buildShareUrl() {
     sampleStride:  ROTATION_FIELD.sampleStride,
     autoNorm:      ROTATION_FIELD.autoNormalize,
     boundary:      PHYSICS_DEFAULTS.boundaryMode,
-    vorticity:      PHYSICS_DEFAULTS.vorticityStrength.toPrecision(3),
-    pressureIters:  PHYSICS_DEFAULTS.pressureIterations,
+    vorticity:     PHYSICS_DEFAULTS.vorticityStrength.toPrecision(3),
+    pressureIters: PHYSICS_DEFAULTS.pressureIterations,
     pattern:       PATTERN_DEFAULTS.pattern,
     velBrightness: BRIGHTNESS_SLIDER_POSITIONS.velocity,
     rotBrightness: BRIGHTNESS_SLIDER_POSITIONS.rotation,
   });
+  if (GRAVITY_EXPERIMENT) {
+    params.set('gravityExperiment', 1);
+    params.set('brushMode',      BRUSH.mode);
+    params.set('gravEnabled',    GRAVITY.enabled ? 1 : 0);
+    params.set('gravStrength',   GRAVITY.strength.toPrecision(3));
+    params.set('gravIters',      GRAVITY.iterations);
+    params.set('densDamping',    GRAVITY.densityDamping.toPrecision(4));
+    params.set('densBrightness', BRIGHTNESS_SLIDER_POSITIONS.density);
+  }
   if (ROTATION_FIELD.maskCenter) {
     params.set('maskCx', ROTATION_FIELD.maskCenter[0].toPrecision(5));
     params.set('maskCy', ROTATION_FIELD.maskCenter[1].toPrecision(5));

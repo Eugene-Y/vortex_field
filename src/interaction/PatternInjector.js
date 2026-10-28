@@ -1,6 +1,6 @@
 'use strict';
 
-import { MOUSE_DEFAULTS, GRID_SIZE, PATTERN_DEFAULTS } from '../config/SimulationConfig.js';
+import { MOUSE_DEFAULTS, GRID_SIZE, PATTERN_DEFAULTS, BRUSH } from '../config/SimulationConfig.js';
 
 // Consecutive injection points are spaced this fraction of the brush radius apart.
 // At 0.75 each Gaussian blob significantly overlaps its neighbours — no visible gaps.
@@ -158,6 +158,24 @@ export class PatternInjector {
     if (action === 'points')    this._injectScatteredPoints(center);
   }
 
+  // Routes impulse injection to velocity or density field based on brush mode.
+  _injectImpulse(position, direction, radius, strength) {
+    if (BRUSH.mode === 'mass') {
+      this._fluidField.injectDensityImpulse(position, radius, strength);
+    } else {
+      this._fluidField.injectImpulse(position, direction, radius, strength);
+    }
+  }
+
+  // Routes disk injection to velocity or density field based on brush mode.
+  _injectDisk(center, radiusUv, strength, velocityMode) {
+    if (BRUSH.mode === 'mass') {
+      this._fluidField.injectDensityDisk(center, radiusUv, strength);
+    } else {
+      this._fluidField.injectDisk(center, radiusUv, strength, velocityMode);
+    }
+  }
+
   // Dispatches to circle or regular polygon injection.
   _injectPolygon(center, sides) {
     const radius   = MOUSE_DEFAULTS.impulseRadius;
@@ -184,7 +202,7 @@ export class PatternInjector {
         center[1] + radiusUv * Math.sin(angle),
       ];
       const direction = [-Math.sin(angle), Math.cos(angle)]; // CCW tangent
-      this._fluidField.injectImpulse(position, direction, brushRadius, strength);
+      this._injectImpulse(position, direction, brushRadius, strength);
     }
   }
 
@@ -216,7 +234,7 @@ export class PatternInjector {
           vertexA[0] + t * sideVec[0],
           vertexA[1] + t * sideVec[1],
         ];
-        this._fluidField.injectImpulse(position, direction, brushRadius, strength);
+        this._injectImpulse(position, direction, brushRadius, strength);
       }
     }
   }
@@ -226,18 +244,21 @@ export class PatternInjector {
     const patternRadius = MOUSE_DEFAULTS.patternScale * 0.5;
     const strength      = MOUSE_DEFAULTS.impulseStrength;
     const modeIndex     = mode === 'spin' ? 0 : mode === 'explode' ? 1 : 2;
-    this._fluidField.injectDisk(center, patternRadius, strength, modeIndex);
+    this._injectDisk(center, patternRadius, strength, modeIndex);
   }
 
-  // At radius ≤ 1 every grid cell gets its own random direction (per-pixel noise).
-  // At radius > 1 the field is tiled with overlapping Gaussian impulses (step = 0.75 × radius)
-  // each pointing in a freshly randomised direction — coarser, blobby noise.
+  // At radius ≤ 1 every grid cell gets its own random value via a GPU shader pass.
+  // At radius > 1 the field is tiled with overlapping Gaussian impulses.
   _injectNoise() {
     const brushRadius = MOUSE_DEFAULTS.impulseRadius;
     const strength    = MOUSE_DEFAULTS.impulseStrength;
 
     if (brushRadius <= 1) {
-      this._fluidField.addNoise(strength, Math.random());
+      if (BRUSH.mode === 'mass') {
+        this._fluidField.addDensityNoise(strength, Math.random());
+      } else {
+        this._fluidField.addNoise(strength, Math.random());
+      }
       return;
     }
 
@@ -250,12 +271,7 @@ export class PatternInjector {
         const u     = col * stepUv;
         const v     = row * stepUv;
         const angle = Math.random() * 2 * Math.PI;
-        this._fluidField.injectImpulse(
-          [u, v],
-          [Math.cos(angle), Math.sin(angle)],
-          brushRadius,
-          strength,
-        );
+        this._injectImpulse([u, v], [Math.cos(angle), Math.sin(angle)], brushRadius, strength);
       }
     }
   }
@@ -290,7 +306,7 @@ export class PatternInjector {
           mode === 'spin'    ? spinDir :
           mode === 'explode' ? armDir  :
           [-armDir[0], -armDir[1]]; // implode
-        this._fluidField.injectImpulse(position, direction, brushRadius, strength);
+        this._injectImpulse(position, direction, brushRadius, strength);
       }
     }
   }

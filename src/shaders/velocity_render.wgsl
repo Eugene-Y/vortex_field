@@ -6,11 +6,12 @@ struct RenderParams {
   gridSize:             u32,
   pad0:                 u32,
   velocityToneMidpoint: f32,
-  pad1:                 f32,
+  densityToneMidpoint:  f32,
 }
 
 @group(0) @binding(0) var velocityTexture: texture_2d<f32>;
-@group(0) @binding(1) var<uniform> params: RenderParams;
+@group(0) @binding(1) var<uniform> params:  RenderParams;
+@group(0) @binding(2) var densityTexture:  texture_2d<f32>;
 
 struct VertexOut {
   @builtin(position) position: vec4f,
@@ -59,6 +60,9 @@ fn fragmentMain(in: VertexOut) -> @location(0) vec4f {
   let col     = u32(in.uv.x * f32(params.gridSize));
   let row     = u32(in.uv.y * f32(params.gridSize));
   let clamped = vec2u(min(col, params.gridSize - 1u), min(row, params.gridSize - 1u));
-  let velocity = textureLoad(velocityTexture, vec2i(clamped), 0).xy;
-  return vec4f(mapVelocityToColor(velocity), 1.0);
+  let velocity          = textureLoad(velocityTexture, vec2i(clamped), 0).xy;
+  let density           = textureLoad(densityTexture,  vec2i(clamped), 0).r;
+  let velocityColor     = mapVelocityToColor(velocity);
+  let densityBrightness = density / (density + params.densityToneMidpoint);
+  return vec4f(min(vec3f(1.0), velocityColor + densityBrightness), 1.0);
 }

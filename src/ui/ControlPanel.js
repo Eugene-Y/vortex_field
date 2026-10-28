@@ -1,9 +1,10 @@
 'use strict';
 
-import { RENDER_DEFAULTS, BRIGHTNESS_SLIDER_POSITIONS, PHYSICS_DEFAULTS, MOUSE_DEFAULTS, ROTATION_FIELD, VEL_LOG_RANGE, ROT_DIM_LOG_RANGE, ROT_BRIGHT_LOG_RANGE, MOUSE_SPEED_REFERENCE } from '../config/SimulationConfig.js';
+import { RENDER_DEFAULTS, BRIGHTNESS_SLIDER_POSITIONS, PHYSICS_DEFAULTS, MOUSE_DEFAULTS, ROTATION_FIELD, VEL_LOG_RANGE, ROT_DIM_LOG_RANGE, ROT_BRIGHT_LOG_RANGE, DENS_LOG_RANGE, GRAVITY, GRAVITY_EXPERIMENT, BRUSH } from '../config/SimulationConfig.js';
 
-const VEL_TONE_BASE = 30.0;
-const ROT_TONE_BASE = 1.0;
+const VEL_TONE_BASE  = 30.0;
+const ROT_TONE_BASE  = 1.0;
+const DENS_TONE_BASE = 10.0;
 
 const VORTICITY_MAX      = 50.0;
 const VORTICITY_EXPONENT = 2.0;   // >1 gives finer steps near zero
@@ -14,6 +15,9 @@ export class ControlPanel {
     rotationContainer.style.width = `${fieldSize}px`;
 
     this._addBrightnessSlider(velocityContainer, 'Brightness', RENDER_DEFAULTS, 'velocityToneMidpoint', VEL_TONE_BASE, VEL_LOG_RANGE, VEL_LOG_RANGE, BRIGHTNESS_SLIDER_POSITIONS.velocity, 'velocity');
+    if (GRAVITY_EXPERIMENT) {
+      this._addBrightnessSlider(velocityContainer, 'Mass brightness', RENDER_DEFAULTS, 'densityToneMidpoint', DENS_TONE_BASE, DENS_LOG_RANGE, DENS_LOG_RANGE, BRIGHTNESS_SLIDER_POSITIONS.density, 'density');
+    }
     const rotBrightnessRow = this._addBrightnessSlider(rotationContainer, 'Brightness', RENDER_DEFAULTS, 'rotationToneMidpoint', ROT_TONE_BASE, ROT_DIM_LOG_RANGE, ROT_BRIGHT_LOG_RANGE, BRIGHTNESS_SLIDER_POSITIONS.rotation, 'rotation');
     this._addAutoNormalizeButton(rotBrightnessRow);
 
@@ -47,6 +51,11 @@ export class ControlPanel {
   }
 
   _buildPhysicsSliders(container) {
+    if (GRAVITY_EXPERIMENT) {
+      this._addBrushModeToggles(container);
+      this._addGravityControls(container);
+    }
+
     const boundaryRow = this._addSelect(container, 'Boundary', [
       { value: 0, label: 'Wrap' },
       { value: 1, label: 'Absorb' },
@@ -92,6 +101,76 @@ export class ControlPanel {
     this._addIntSlider(container, 'Incompressibility (gas->liquid)', 1, 100,
       () => 101 - PHYSICS_DEFAULTS.pressureIterations,
       v => { PHYSICS_DEFAULTS.pressureIterations = 101 - v; }
+    );
+  }
+
+  _addBrushModeToggles(container) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'control-row';
+
+    const label = document.createElement('span');
+    label.className = 'control-label';
+    label.textContent = 'Brush mode';
+    wrapper.appendChild(label);
+
+    const group = document.createElement('div');
+    group.style.cssText = 'display:flex;gap:4px';
+
+    const applyStyle = (btn, active) => { btn.style.opacity = active ? '1' : '0.35'; };
+
+    const makeMode = (mode, text) => {
+      const btn = document.createElement('button');
+      btn.textContent = text;
+      applyStyle(btn, BRUSH.mode === mode);
+      btn.addEventListener('click', () => {
+        BRUSH.mode = mode;
+        applyStyle(impulseBtn, BRUSH.mode === 'impulse');
+        applyStyle(massBtn,    BRUSH.mode === 'mass');
+        btn.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      return btn;
+    };
+
+    const impulseBtn = makeMode('impulse', 'Impulse');
+    const massBtn    = makeMode('mass',    'Mass');
+    group.appendChild(impulseBtn);
+    group.appendChild(massBtn);
+    wrapper.appendChild(group);
+    container.appendChild(wrapper);
+  }
+
+  _addGravityControls(container) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'control-row';
+
+    const label = document.createElement('span');
+    label.className = 'control-label';
+    label.textContent = 'Gravity';
+    wrapper.appendChild(label);
+
+    const btn = document.createElement('button');
+    const applyStyle = () => { btn.style.opacity = GRAVITY.enabled ? '1' : '0.35'; };
+    btn.textContent = 'Enable';
+    applyStyle();
+    btn.addEventListener('click', () => {
+      GRAVITY.enabled = !GRAVITY.enabled;
+      applyStyle();
+      btn.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    wrapper.appendChild(btn);
+    container.appendChild(wrapper);
+
+    this._addLogSlider(container, 'Gravity strength', 0.01, 500,
+      () => GRAVITY.strength,
+      v => { GRAVITY.strength = v; }
+    );
+    this._addIntSlider(container, 'Gravity iterations', 1, 80,
+      () => GRAVITY.iterations,
+      v => { GRAVITY.iterations = v; }
+    );
+    this._addLogSlider(container, 'Mass damping', 0.9, 1.0,
+      () => GRAVITY.densityDamping,
+      v => { GRAVITY.densityDamping = v; }
     );
   }
 

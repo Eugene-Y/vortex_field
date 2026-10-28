@@ -7,7 +7,7 @@ import { MouseInjector }           from './interaction/MouseInjector.js';
 import { ControlPanel }            from './ui/ControlPanel.js';
 import { PatternInjector }         from './interaction/PatternInjector.js';
 import { FocusMaskInteractor }     from './interaction/FocusMaskInteractor.js';
-import { GRID_SIZE, DISPLAY_SCALE, DISPLAY_GAP, PHYSICS_DEFAULTS, buildShareUrl } from './config/SimulationConfig.js';
+import { GRID_SIZE, DISPLAY_SCALE, DISPLAY_GAP, PHYSICS_DEFAULTS, GRAVITY_EXPERIMENT, buildShareUrl } from './config/SimulationConfig.js';
 
 const CANVAS_FIELD_SIZE = computeFieldPixelSize();
 
@@ -38,6 +38,12 @@ async function loadAllShaders() {
     velocityInjectDisk,
     velocityNoise,
     velocityRender,
+    densityAdvect,
+    gravityPoisson,
+    gravityForce,
+    densityInjectImpulse,
+    densityInjectDisk,
+    densityInjectNoise,
     rotationCompute,
     rotationReduce,
     rotationEnergy,
@@ -53,6 +59,12 @@ async function loadAllShaders() {
     loadShaderSource('src/shaders/velocity_inject_disk.wgsl'),
     loadShaderSource('src/shaders/velocity_noise.wgsl'),
     loadShaderSource('src/shaders/velocity_render.wgsl'),
+    loadShaderSource('src/shaders/density_advect.wgsl'),
+    loadShaderSource('src/shaders/gravity_poisson.wgsl'),
+    loadShaderSource('src/shaders/gravity_force.wgsl'),
+    loadShaderSource('src/shaders/density_inject_impulse.wgsl'),
+    loadShaderSource('src/shaders/density_inject_disk.wgsl'),
+    loadShaderSource('src/shaders/density_inject_noise.wgsl'),
     loadShaderSource('src/shaders/rotation_compute.wgsl'),
     loadShaderSource('src/shaders/rotation_reduce.wgsl'),
     loadShaderSource('src/shaders/rotation_energy.wgsl'),
@@ -71,6 +83,12 @@ async function loadAllShaders() {
       injectDisk:           velocityInjectDisk,
       noise:                velocityNoise,
       render:               velocityRender,
+      densityAdvect,
+      gravityPoisson,
+      gravityForce,
+      densityInjectImpulse,
+      densityInjectDisk,
+      densityInjectNoise,
     },
     rotation: {
       compute: rotationCompute,
@@ -211,9 +229,13 @@ async function main() {
   });
 
   document.getElementById('pause-button').addEventListener('click', togglePause);
-  document.getElementById('clear-button').addEventListener('click', () => fluidField.reset());
+  document.getElementById('clear-dynamics-button').addEventListener('click', () => fluidField.reset());
+  const clearMassButton = document.getElementById('clear-mass-button');
+  clearMassButton.hidden = !GRAVITY_EXPERIMENT;
+  clearMassButton.addEventListener('click', () => fluidField.clearDensity());
   document.getElementById('reset-button').addEventListener('click', () => {
-    window.location.href = window.location.pathname;
+    const experimentQuery = GRAVITY_EXPERIMENT ? '?gravityExperiment=1' : '';
+    window.location.href = window.location.pathname + experimentQuery;
   });
 
   document.getElementById('copy-url-button').addEventListener('click', () => {

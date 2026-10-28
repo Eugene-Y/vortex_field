@@ -1,6 +1,6 @@
 'use strict';
 
-import { MOUSE_DEFAULTS, MOUSE_SPEED_REFERENCE, GRID_SIZE } from '../config/SimulationConfig.js';
+import { MOUSE_DEFAULTS, MOUSE_SPEED_REFERENCE, GRID_SIZE, BRUSH } from '../config/SimulationConfig.js';
 
 const INJECTION_STEP_FRACTION = 0.75; // same coverage rule as PatternInjector
 
@@ -59,13 +59,13 @@ export class MouseInjector {
     const steps  = Math.max(1, Math.ceil(lengthUv / stepUv));
 
     for (let i = 0; i < steps; i++) {
-      const t = steps === 1 ? 0 : i / (steps - 1);
+      const t        = steps === 1 ? 0 : i / (steps - 1);
       const position = [from[0] + t * dx, from[1] + t * dy];
-      this._fluidField.injectImpulse(
-        position, direction,
-        MOUSE_DEFAULTS.impulseRadius,
-        strength,
-      );
+      if (BRUSH.mode === 'mass') {
+        this._fluidField.injectDensityImpulse(position, MOUSE_DEFAULTS.impulseRadius, strength);
+      } else {
+        this._fluidField.injectImpulse(position, direction, MOUSE_DEFAULTS.impulseRadius, strength);
+      }
     }
   }
 
