@@ -58,6 +58,7 @@ src/
     MouseInjector.js            — translates mouse events into field impulses
     PatternInjector.js          — double-click / P-key injection of velocity patterns on Field B
     FocusMaskInteractor.js      — click/drag on Field B to restrict rotation to a focus circle
+    FieldSnapshotSaver.js       — ↓ saves both fields as vortex_a/b_YYYYMMDD_HHMMSS.png
   ui/
     ControlPanel.js             — all DOM slider creation and wiring
     ControlHintDisplay.js       — shows the hovered/focused control's data-hint in the description area
@@ -272,6 +273,11 @@ Current patterns:
 - Impulse strength is speed-scaled: `strength = impulseStrength × (1 − sensitivity + sensitivity × speedFactor)`
   where `speedFactor = pixelsPerSecond / MOUSE_SPEED_REFERENCE`; `speedSensitivity = 0`
   gives constant strength, `= 1` scales fully with mouse velocity
+
+**Snapshots** (`FieldSnapshotSaver.js`): ↓ (ignored with modifiers, on key repeat and while a
+form control has focus) saves both fields as PNG at one pixel per grid cell. A WebGPU
+canvas is only readable until the frame is presented, so the key sets a request that
+`renderFields()` fulfils right after rendering (and triggers a render while paused).
 
 **Focus mask** (`FocusMaskInteractor.js`):
 - Click or drag on Field B sets a circular focus mask at that grid position

@@ -27,6 +27,7 @@ produces them.
 | double-click on Field B, or **P** over either field | inject the pattern selected in **Inject** at that point |
 | click or drag on Field B | focus circle: compute Field B only inside it (the brush radius sets its size); click it again or press **Esc** to clear |
 | double-click a slider | reset it to its default |
+| **↓** | save both fields as `vortex_a_…png` and `vortex_b_…png` |
 | **Copy URL** | a link that reproduces the current settings exactly |
 
 Hover any control to see what it does.

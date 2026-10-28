@@ -8,6 +8,7 @@ import { ControlPanel }            from './ui/ControlPanel.js';
 import { ControlHintDisplay }      from './ui/ControlHintDisplay.js';
 import { PatternInjector }         from './interaction/PatternInjector.js';
 import { FocusMaskInteractor }     from './interaction/FocusMaskInteractor.js';
+import { FieldSnapshotSaver }      from './interaction/FieldSnapshotSaver.js';
 import { GRID_SIZE, DISPLAY_SCALE, DISPLAY_GAP, PHYSICS_DEFAULTS, GRAVITY_EXPERIMENT, buildShareUrl } from './config/SimulationConfig.js';
 
 const RESERVED_VERTICAL_PX   = 180;
@@ -191,7 +192,12 @@ async function main() {
     fluidField.render();
     rotationField.recomputeFrom(fluidField.velocityTexture, fluidField.stepGeneration);
     focusMask.updateOverlay();
+    snapshotSaver.saveIfRequested();
   }
+
+  const snapshotSaver = new FieldSnapshotSaver(canvasMain, canvasRotation, () => {
+    if (paused) renderFields();
+  });
 
   function renderFrame() {
     // Apply input once per display frame — injections are not sub-stepped.
