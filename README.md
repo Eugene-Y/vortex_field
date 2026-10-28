@@ -6,7 +6,7 @@
 **[▶ Live demo](https://eugene-y.github.io/vortex_field/)** — runs in the browser, needs WebGPU
 (recent Chrome or Edge; Safari and Firefox with WebGPU enabled).
 
-![Field A (velocity) and Field B (rotation centers) side by side: a pattern injected into the flow, then a spinning disk](docs/vortex-field.gif)
+![Field A (velocity) and Field B (rotation centers) side by side: a pattern injected into the flow, a spinning disk, then rotation centers focusing like a caustic](docs/vortex-field.gif)
 
 Every pair of fluid cells has an instantaneous center of rotation. Vortex Field is an
 interactive visualizer of where those centers pile up, side by side with the flow that
