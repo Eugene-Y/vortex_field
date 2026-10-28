@@ -6,7 +6,10 @@ import { MOUSE_DEFAULTS, GRID_SIZE, PATTERN_DEFAULTS, BRUSH } from '../config/Si
 // At 0.75 each Gaussian blob significantly overlaps its neighbours — no visible gaps.
 const INJECTION_STEP_FRACTION = 0.75;
 
-const INJECT_HINT = 'Pattern added to Field A when you double-click Field B. It adds to the current flow.';
+const INJECT_HINT = 'Pattern added to Field A when you double-click Field B or press P over it. It adds to the current flow.';
+
+// Physical key, so the shortcut works whatever keyboard layout is active.
+const INJECT_KEY_CODE = 'KeyP';
 
 const PATTERNS = [
   { value: 'disk-spin',    label: 'Disk — spin'        },
@@ -59,10 +62,17 @@ export class PatternInjector {
     this._fieldSize      = fieldSize;
     this._displayGap     = displayGap;
     this._pending        = null;
+    this._pointerOverFieldB = null;
     this._select         = this._buildDropdown(patternSizeRow);
 
-    this._onDblClick = this._onDblClick.bind(this);
-    this._canvasRotation.addEventListener('dblclick', this._onDblClick);
+    this._onDblClick      = this._onDblClick.bind(this);
+    this._onPointerMove   = this._onPointerMove.bind(this);
+    this._onPointerLeave  = this._onPointerLeave.bind(this);
+    this._onKeyDown       = this._onKeyDown.bind(this);
+    this._canvasRotation.addEventListener('dblclick',     this._onDblClick);
+    this._canvasRotation.addEventListener('pointermove',  this._onPointerMove);
+    this._canvasRotation.addEventListener('pointerleave', this._onPointerLeave);
+    window.addEventListener('keydown', this._onKeyDown);
   }
 
   injectAt(center) {
@@ -83,7 +93,10 @@ export class PatternInjector {
   }
 
   dispose() {
-    this._canvasRotation.removeEventListener('dblclick', this._onDblClick);
+    this._canvasRotation.removeEventListener('dblclick',     this._onDblClick);
+    this._canvasRotation.removeEventListener('pointermove',  this._onPointerMove);
+    this._canvasRotation.removeEventListener('pointerleave', this._onPointerLeave);
+    window.removeEventListener('keydown', this._onKeyDown);
   }
 
   // Appends the inject label + select to an existing control row.
@@ -115,25 +128,49 @@ export class PatternInjector {
   }
 
   _onDblClick(event) {
+    this._queuePatternAtPointer(event);
+  }
+
+  _onPointerMove(event) {
+    this._pointerOverFieldB = { clientX: event.clientX, clientY: event.clientY };
+  }
+
+  _onPointerLeave() {
+    this._pointerOverFieldB = null;
+  }
+
+  _onKeyDown(event) {
+    if (event.code !== INJECT_KEY_CODE || event.repeat) return;
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    if (this._isTypingIntoField(event.target)) return;
+    if (!this._pointerOverFieldB) return;
+    this._queuePatternAtPointer(this._pointerOverFieldB);
+  }
+
+  _isTypingIntoField(target) {
+    return target.matches?.('input[type=number], input[type=text], textarea, [contenteditable]') ?? false;
+  }
+
+  _queuePatternAtPointer(pointer) {
     const action = this._select.value;
     const center = (action === 'noise')
       ? null
-      : this._rightFieldClickToUv(event);
+      : this._fieldBPointerToUv(pointer);
 
     if (action === 'noise' || center !== null) {
       this._pending = { action, center };
     }
   }
 
-  // Maps a double-click on canvas-rotation to UV [0,1]² in Field A space.
+  // Maps a pointer position over canvas-rotation to UV [0,1]² in Field A space.
   // The two canvases share the same grid UV space, so no offset is needed.
-  _rightFieldClickToUv(event) {
+  _fieldBPointerToUv(pointer) {
     const rect   = this._canvasRotation.getBoundingClientRect();
     const scaleX = this._canvasRotation.width  / rect.width;
     const scaleY = this._canvasRotation.height / rect.height;
 
-    const pixelX = (event.clientX - rect.left) * scaleX;
-    const pixelY = (event.clientY - rect.top)  * scaleY;
+    const pixelX = (pointer.clientX - rect.left) * scaleX;
+    const pixelY = (pointer.clientY - rect.top)  * scaleY;
 
     const u = pixelX / this._fieldSize;
     const v = 1.0 - pixelY / this._fieldSize;

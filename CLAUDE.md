@@ -56,7 +56,7 @@ src/
     PhysicsRegistry.js          — maps physics model identifiers to step implementations
   interaction/
     MouseInjector.js            — translates mouse events into field impulses
-    PatternInjector.js          — double-click injection of velocity patterns on Field B
+    PatternInjector.js          — double-click / P-key injection of velocity patterns on Field B
     FocusMaskInteractor.js      — click/drag on Field B to restrict rotation to a focus circle
   ui/
     ControlPanel.js             — all DOM slider creation and wiring
@@ -242,9 +242,10 @@ Current sliders:
 - **Sample stride** (under Field B) — powers of 2 (1, 2, 4, 8, 16, 32); skips cells in both
   axes, reducing computation by stride²; brightness auto-compensated
 
-**Pattern injection** (`PatternInjector.js` — double-click on Field B):
-A dropdown below Field B selects the injection pattern. Double-clicking injects at
-that UV position in Field A space. Uses current brush radius/strength. Adds to existing
+**Pattern injection** (`PatternInjector.js` — double-click on Field B, or P with the pointer over it):
+A dropdown below Field B selects the injection pattern. Double-clicking or pressing P
+(matched by physical key `KeyP`, so any layout works; ignored with Cmd/Ctrl/Alt, on key
+repeat and while typing in a text field) injects at that UV position in Field A space. Uses current brush radius/strength. Adds to existing
 velocity, never resets it. Initial pattern is queued for first render frame (not applied
 at startup) to guarantee a stable GPU state.
 

@@ -30,7 +30,7 @@ const CONTROL_HINTS = {
   gravityStrength:    'How strongly mass pulls on the fluid.',
   gravityIterations:  'Solver iterations for the gravitational potential per step: more is more accurate but slower.',
   massDamping:        'Share of mass kept per second: below 1, injected mass slowly fades.',
-  patternSize:        'Size of the pattern injected by double-clicking Field B, as a fraction of the field.',
+  patternSize:        'Size of the pattern injected from Field B (double-click or P), as a fraction of the field.',
   showContribution:   'Which rotation directions Field B accumulates: CCW, CW, or both.',
   colorCcw:           'Color of counter-clockwise rotation in Field B.',
   colorCw:            'Color of clockwise rotation in Field B.',
