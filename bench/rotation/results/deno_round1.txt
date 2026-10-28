@@ -1,0 +1,29 @@
+adapter: Apple M3 · timestamps true · subgroups false
+
+## medium · vortices — grid 256, 1024 offsets (512 unique per cell)
+reference: mean|x| 2.05e-2, max|x| 3.90e+0, run-to-run relL1 5.9e-8
+production                         frame   15.599 ms  compute   13.330  reduce  0.227  × 1.00    2.52 Gpair/s  relL1 4.7e-8  relMax 2.4e-7
+generated reference                frame   13.683 ms  compute   12.248  reduce  0.182  × 1.14    2.74 Gpair/s  relL1 6.7e-8  relMax 3.7e-7
+halfPlane                          frame   15.952 ms  compute   14.433  reduce  0.389  × 0.98    2.32 Gpair/s  relL1 1.2e-4  relMax 3.1e-4
+inverseT                           frame   22.385 ms  compute   19.964  reduce  0.283  × 0.70    1.68 Gpair/s  relL1 3.0e-2  relMax 1.8e-3
+inverseTExact                      frame   17.145 ms  compute   15.590  reduce  0.202  × 0.91    2.15 Gpair/s  relL1 1.6e-5  relMax 1.5e-3
+halfPlane+inverseT                 frame   14.177 ms  compute   12.362  reduce  0.246  × 1.10    2.71 Gpair/s  relL1 3.0e-2  relMax 1.8e-3
+[diag] no accumulation             frame    9.565 ms  compute    7.636  reduce  0.092  × 1.63    4.39 Gpair/s  relL1 1.0e+0  relMax 1.0e+0
+hp+invT casF32 K1                  frame   17.221 ms  compute   16.245  reduce  0.027  × 0.91    2.07 Gpair/s  relL1 3.0e-2  relMax 1.8e-3
+hp+invT casF32 K4                  frame   16.622 ms  compute   16.066  reduce  0.022  × 0.94    2.09 Gpair/s  relL1 3.0e-2  relMax 1.8e-3
+[diag] hp+invT fixed32 K1          frame   11.213 ms  compute   10.650  reduce  0.084  × 1.39    3.15 Gpair/s  relL1 3.1e-2  relMax 2.0e-3
+hp+invT fixed64 K32                frame   24.645 ms  compute   21.919  reduce  0.498  × 0.63    1.53 Gpair/s  relL1 3.0e-2  relMax 1.8e-3
+hp+invT fixed64 K4                 frame   15.271 ms  compute   14.793  reduce  0.093  × 1.02    2.27 Gpair/s  relL1 3.0e-2  relMax 1.8e-3
+hp+invT fixed64 K1                 frame   12.019 ms  compute    9.599  reduce  0.127  × 1.30    3.50 Gpair/s  relL1 3.0e-2  relMax 1.8e-3
+hp+invTExact fixed64 K1            frame    9.440 ms  compute    7.979  reduce  0.066  × 1.65    4.21 Gpair/s  relL1 1.3e-4  relMax 1.5e-3
+hp+invT casF32 K32 split8          frame   11.233 ms  compute    9.920  reduce  0.265  × 1.39    3.38 Gpair/s  relL1 3.0e-2  relMax 1.8e-3
+
+## medium · solidBody — grid 256, 1024 offsets (512 unique per cell)
+reference: mean|x| 5.36e-3, max|x| 3.29e+2, run-to-run relL1 0.0e+0
+production                         frame  657.592 ms  compute  657.742  reduce  0.175  × 1.00    0.05 Gpair/s  relL1 0.0e+0  relMax 0.0e+0
+generated reference                frame  626.635 ms  compute  627.473  reduce  0.172  × 1.05    0.05 Gpair/s  relL1 0.0e+0  relMax 0.0e+0
+halfPlane                          frame  648.992 ms  compute  650.438  reduce  0.151  × 1.01    0.05 Gpair/s  relL1 0.0e+0  relMax 0.0e+0
+inverseT                           frame  645.864 ms  compute  649.145  reduce  0.304  × 1.02    0.05 Gpair/s  relL1 0.0e+0  relMax 0.0e+0
+inverseTExact                      frame  720.765 ms  compute  735.819  reduce  1.618  × 0.91    0.05 Gpair/s  relL1 8.0e-3  relMax 3.1e-3
+halfPlane+inverseT                 frame  754.888 ms  compute  765.335  reduce  0.713  × 0.87    0.04 Gpair/s  relL1 0.0e+0  relMax 0.0e+0
+[diag] no accumulation             frame    7.577 ms  compute    5.364  reduce  0.039  ×86.78    6.26 Gpair/s  relL1 1.0e+0  relMax 1.0e+0

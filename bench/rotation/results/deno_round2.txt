@@ -1,0 +1,166 @@
+adapter: Apple M3 · timestamps true · subgroups false
+
+## medium · vortices — grid 256, 1024 offsets (512 unique per cell, 26 row spans)
+reference: mean|x| 2.05e-2, max|x| 3.90e+0, run-to-run relL1 7.1e-8
+production                         frame   13.063 ms  compute   10.951 (min   10.659)  reduce  0.126  × 1.00    3.06 Gpair/s  relL1 6.9e-8  relMax 6.1e-7
+hp+invTExact fixed64 K1 cheapWrap  frame    4.836 ms  compute    3.710 (min    3.692)  reduce  0.008  × 2.95    9.04 Gpair/s  relL1 1.3e-4  relMax 1.5e-3
+fixed64 K1 spans                   frame    4.762 ms  compute    3.641 (min    3.628)  reduce  0.009  × 3.01    9.22 Gpair/s  relL1 1.3e-4  relMax 1.5e-3
+fixed64 K1 cheapWrap storageVel    frame    4.778 ms  compute    3.752 (min    3.669)  reduce  0.008  × 2.92    8.94 Gpair/s  relL1 1.3e-4  relMax 1.5e-3
+wgCache256 wg64 tiled spans        frame    4.970 ms  compute    3.788 (min    3.780)  reduce  0.008  × 2.89    8.86 Gpair/s  relL1 1.3e-4  relMax 1.5e-3
+wgCache256 wg256 tiled spans       frame    4.929 ms  compute    3.810 (min    3.744)  reduce  0.008  × 2.87    8.81 Gpair/s  relL1 1.3e-4  relMax 1.5e-3
+wgCache256 wg64 tiled spans storageVel frame    4.979 ms  compute    3.804 (min    3.795)  reduce  0.008  × 2.88    8.82 Gpair/s  relL1 1.3e-4  relMax 1.5e-3
+[diag] no accumulation spans       frame    3.256 ms  compute    2.205 (min    2.199)  reduce  0.006  × 4.97   15.22 Gpair/s  relL1 1.0e+0  relMax 1.0e+0
+
+## medium · simulatedSpin — grid 256, 1024 offsets (512 unique per cell, 26 row spans)
+reference: mean|x| 7.33e-3, max|x| 1.15e+2, run-to-run relL1 4.4e-7
+production                         frame   25.076 ms  compute   23.159 (min   22.996)  reduce  0.117  × 1.00    1.45 Gpair/s  relL1 3.6e-7  relMax 1.2e-6
+hp+invTExact fixed64 K1 cheapWrap  frame    5.828 ms  compute    4.633 (min    4.573)  reduce  0.009  × 5.00    7.24 Gpair/s  relL1 1.1e-5  relMax 2.7e-6
+fixed64 K1 spans                   frame    5.898 ms  compute    4.604 (min    4.518)  reduce  0.010  × 5.03    7.29 Gpair/s  relL1 1.1e-5  relMax 2.7e-6
+fixed64 K1 cheapWrap storageVel    frame    5.696 ms  compute    4.581 (min    4.535)  reduce  0.008  × 5.06    7.32 Gpair/s  relL1 1.1e-5  relMax 2.7e-6
+wgCache256 wg64 tiled spans        frame    4.945 ms  compute    3.864 (min    3.835)  reduce  0.008  × 5.99    8.68 Gpair/s  relL1 1.1e-5  relMax 2.7e-6
+wgCache256 wg256 tiled spans       frame    4.970 ms  compute    3.842 (min    3.803)  reduce  0.008  × 6.03    8.73 Gpair/s  relL1 1.1e-5  relMax 2.7e-6
+wgCache256 wg64 tiled spans storageVel frame    4.936 ms  compute    3.915 (min    3.835)  reduce  0.009  × 5.92    8.57 Gpair/s  relL1 1.1e-5  relMax 2.7e-6
+[diag] no accumulation spans       frame    3.195 ms  compute    2.202 (min    2.201)  reduce  0.006  ×10.52   15.24 Gpair/s  relL1 1.0e+0  relMax 1.0e+0
+
+## medium · simulatedMixed — grid 256, 1024 offsets (512 unique per cell, 26 row spans)
+reference: mean|x| 1.29e-2, max|x| 4.33e+0, run-to-run relL1 5.3e-8
+production                         frame   12.484 ms  compute   10.436 (min   10.390)  reduce  0.127  × 1.00    3.22 Gpair/s  relL1 5.7e-8  relMax 1.1e-7
+hp+invTExact fixed64 K1 cheapWrap  frame    5.367 ms  compute    4.148 (min    4.095)  reduce  0.009  × 2.52    8.09 Gpair/s  relL1 1.0e-4  relMax 1.4e-3
+fixed64 K1 spans                   frame    5.403 ms  compute    4.136 (min    4.043)  reduce  0.009  × 2.52    8.11 Gpair/s  relL1 1.0e-4  relMax 1.4e-3
+fixed64 K1 cheapWrap storageVel    frame    5.202 ms  compute    4.026 (min    3.996)  reduce  0.008  × 2.59    8.33 Gpair/s  relL1 1.0e-4  relMax 1.4e-3
+wgCache256 wg64 tiled spans        frame    5.013 ms  compute    4.019 (min    4.008)  reduce  0.008  × 2.60    8.35 Gpair/s  relL1 1.0e-4  relMax 1.4e-3
+wgCache256 wg256 tiled spans       frame    5.026 ms  compute    3.914 (min    3.885)  reduce  0.009  × 2.67    8.57 Gpair/s  relL1 1.0e-4  relMax 1.4e-3
+wgCache256 wg64 tiled spans storageVel frame    5.096 ms  compute    3.942 (min    3.863)  reduce  0.008  × 2.65    8.51 Gpair/s  relL1 1.0e-4  relMax 1.4e-3
+[diag] no accumulation spans       frame    3.149 ms  compute    2.204 (min    2.204)  reduce  0.006  × 4.73   15.22 Gpair/s  relL1 1.0e+0  relMax 1.0e+0
+
+## medium · whiteNoise — grid 256, 1024 offsets (512 unique per cell, 26 row spans)
+reference: mean|x| 4.71e-2, max|x| 3.12e-1, run-to-run relL1 3.2e-8
+production                         frame   12.220 ms  compute   10.205 (min   10.184)  reduce  0.128  × 1.00    3.29 Gpair/s  relL1 3.1e-8  relMax 9.5e-8
+hp+invTExact fixed64 K1 cheapWrap  frame    5.316 ms  compute    4.104 (min    4.099)  reduce  0.009  × 2.49    8.18 Gpair/s  relL1 1.4e-4  relMax 3.7e-2
+fixed64 K1 spans                   frame    5.354 ms  compute    4.194 (min    4.079)  reduce  0.008  × 2.43    8.00 Gpair/s  relL1 1.4e-4  relMax 3.7e-2
+fixed64 K1 cheapWrap storageVel    frame    5.216 ms  compute    4.157 (min    4.098)  reduce  0.008  × 2.46    8.07 Gpair/s  relL1 1.4e-4  relMax 3.7e-2
+wgCache256 wg64 tiled spans        frame    5.041 ms  compute    3.988 (min    3.950)  reduce  0.008  × 2.56    8.41 Gpair/s  relL1 1.4e-4  relMax 3.7e-2
+wgCache256 wg256 tiled spans       frame    5.021 ms  compute    3.987 (min    3.956)  reduce  0.009  × 2.56    8.42 Gpair/s  relL1 1.4e-4  relMax 3.7e-2
+wgCache256 wg64 tiled spans storageVel frame    4.979 ms  compute    3.972 (min    3.939)  reduce  0.008  × 2.57    8.45 Gpair/s  relL1 1.4e-4  relMax 3.7e-2
+[diag] no accumulation spans       frame    3.153 ms  compute    2.206 (min    2.205)  reduce  0.006  × 4.62   15.21 Gpair/s  relL1 1.0e+0  relMax 1.0e+0
+
+## medium · solidBody — grid 256, 1024 offsets (512 unique per cell, 26 row spans)
+reference: mean|x| 5.37e-3, max|x| 3.52e+2, run-to-run relL1 0.0e+0
+production                         frame  719.525 ms  compute  705.978 (min  705.978)  reduce  0.000  × 1.00    0.05 Gpair/s  relL1 0.0e+0  relMax 0.0e+0
+hp+invTExact fixed64 K1 cheapWrap  frame   27.908 ms  compute   25.682 (min   25.541)  reduce  0.013  ×27.49    1.31 Gpair/s  relL1 2.6e-7  relMax 2.6e-7
+fixed64 K1 spans                   frame   28.528 ms  compute   26.684 (min   25.624)  reduce  0.011  ×26.46    1.26 Gpair/s  relL1 2.6e-7  relMax 2.6e-7
+fixed64 K1 cheapWrap storageVel    frame   28.440 ms  compute   26.840 (min   25.679)  reduce  0.032  ×26.30    1.25 Gpair/s  relL1 2.6e-7  relMax 2.6e-7
+wgCache256 wg64 tiled spans        frame    3.372 ms  compute    2.015 (min    1.965)  reduce  0.030  ×350.35   16.65 Gpair/s  relL1 2.6e-7  relMax 2.6e-7
+wgCache256 wg256 tiled spans       frame    3.417 ms  compute    2.140 (min    2.098)  reduce  0.035  ×329.84   15.68 Gpair/s  relL1 2.6e-7  relMax 2.6e-7
+wgCache256 wg64 tiled spans storageVel frame    3.165 ms  compute    1.913 (min    1.889)  reduce  0.033  ×368.98   17.54 Gpair/s  relL1 2.6e-7  relMax 2.6e-7
+[diag] no accumulation spans       frame    2.631 ms  compute    1.490 (min    1.477)  reduce  0.034  ×473.66   22.51 Gpair/s  relL1 1.0e+0  relMax 1.0e+0
+
+## large · vortices — grid 256, 6184 offsets (3092 unique per cell, 77 row spans)
+reference: mean|x| 7.64e-2, max|x| 5.46e+0, run-to-run relL1 1.5e-7
+production                         frame   76.413 ms  compute   73.055 (min   71.609)  reduce  0.142  × 1.00    2.77 Gpair/s  relL1 1.6e-7  relMax 7.9e-7
+hp+invTExact fixed64 K1 cheapWrap  frame   26.186 ms  compute   24.172 (min   24.118)  reduce  0.035  × 3.02    8.38 Gpair/s  relL1 1.5e-4  relMax 2.4e-3
+fixed64 K1 spans                   frame   25.920 ms  compute   24.003 (min   23.687)  reduce  0.009  × 3.04    8.44 Gpair/s  relL1 1.5e-4  relMax 2.4e-3
+fixed64 K1 cheapWrap storageVel    frame   26.224 ms  compute   24.653 (min   24.117)  reduce  0.008  × 2.96    8.22 Gpair/s  relL1 1.5e-4  relMax 2.4e-3
+wgCache256 wg64 tiled spans        frame   25.689 ms  compute   24.428 (min   24.153)  reduce  0.009  × 2.99    8.30 Gpair/s  relL1 1.5e-4  relMax 2.4e-3
+wgCache256 wg256 tiled spans       frame   25.784 ms  compute   24.188 (min   24.096)  reduce  0.010  × 3.02    8.38 Gpair/s  relL1 1.5e-4  relMax 2.4e-3
+wgCache256 wg64 tiled spans storageVel frame   25.746 ms  compute   24.154 (min   23.997)  reduce  0.008  × 3.02    8.39 Gpair/s  relL1 1.5e-4  relMax 2.4e-3
+[diag] no accumulation spans       frame   15.559 ms  compute   14.258 (min   13.910)  reduce  0.007  × 5.12   14.21 Gpair/s  relL1 1.0e+0  relMax 1.0e+0
+
+## large · simulatedSpin — grid 256, 6184 offsets (3092 unique per cell, 77 row spans)
+reference: mean|x| 3.26e-2, max|x| 4.24e+2, run-to-run relL1 1.6e-7
+production                         frame  137.974 ms  compute  133.034 (min  129.082)  reduce  0.121  × 1.00    1.52 Gpair/s  relL1 3.4e-7  relMax 5.0e-7
+hp+invTExact fixed64 K1 cheapWrap  frame   30.846 ms  compute   29.383 (min   29.166)  reduce  0.008  × 4.53    6.90 Gpair/s  relL1 1.8e-5  relMax 1.9e-5
+fixed64 K1 spans                   frame   31.059 ms  compute   29.330 (min   29.322)  reduce  0.008  × 4.54    6.91 Gpair/s  relL1 1.8e-5  relMax 1.9e-5
+fixed64 K1 cheapWrap storageVel    frame   31.115 ms  compute   29.962 (min   28.898)  reduce  0.010  × 4.44    6.76 Gpair/s  relL1 1.8e-5  relMax 1.9e-5
+wgCache256 wg64 tiled spans        frame   25.905 ms  compute   24.554 (min   24.026)  reduce  0.008  × 5.42    8.25 Gpair/s  relL1 1.8e-5  relMax 1.9e-5
+wgCache256 wg256 tiled spans       frame   26.897 ms  compute   25.318 (min   25.148)  reduce  0.008  × 5.25    8.00 Gpair/s  relL1 1.8e-5  relMax 1.9e-5
+wgCache256 wg64 tiled spans storageVel frame   26.533 ms  compute   24.813 (min   24.780)  reduce  0.008  × 5.36    8.17 Gpair/s  relL1 1.8e-5  relMax 1.9e-5
+[diag] no accumulation spans       frame   15.835 ms  compute   15.188 (min   14.291)  reduce  0.007  × 8.76   13.34 Gpair/s  relL1 1.0e+0  relMax 1.0e+0
+
+## large · simulatedMixed — grid 256, 6184 offsets (3092 unique per cell, 77 row spans)
+reference: mean|x| 3.29e-2, max|x| 9.55e+0, run-to-run relL1 1.4e-7
+production                         frame   86.969 ms  compute   83.648 (min   80.999)  reduce  0.132  × 1.00    2.42 Gpair/s  relL1 1.4e-7  relMax 5.0e-7
+hp+invTExact fixed64 K1 cheapWrap  frame   28.738 ms  compute   26.912 (min   26.808)  reduce  0.009  × 3.11    7.53 Gpair/s  relL1 6.1e-5  relMax 1.8e-4
+fixed64 K1 spans                   frame   28.654 ms  compute   27.080 (min   26.783)  reduce  0.009  × 3.09    7.48 Gpair/s  relL1 6.1e-5  relMax 1.8e-4
+fixed64 K1 cheapWrap storageVel    frame   28.675 ms  compute   26.943 (min   26.532)  reduce  0.009  × 3.10    7.52 Gpair/s  relL1 6.1e-5  relMax 1.8e-4
+wgCache256 wg64 tiled spans        frame   27.314 ms  compute   25.521 (min   25.258)  reduce  0.009  × 3.28    7.94 Gpair/s  relL1 6.1e-5  relMax 1.8e-4
+wgCache256 wg256 tiled spans       frame   27.637 ms  compute   26.159 (min   26.091)  reduce  0.008  × 3.20    7.75 Gpair/s  relL1 6.1e-5  relMax 1.8e-4
+wgCache256 wg64 tiled spans storageVel frame   27.053 ms  compute   25.325 (min   25.232)  reduce  0.008  × 3.30    8.00 Gpair/s  relL1 6.1e-5  relMax 1.8e-4
+[diag] no accumulation spans       frame   15.576 ms  compute   14.796 (min   14.247)  reduce  0.007  × 5.65   13.69 Gpair/s  relL1 1.0e+0  relMax 1.0e+0
+
+## large · whiteNoise — grid 256, 6184 offsets (3092 unique per cell, 77 row spans)
+reference: mean|x| 9.27e-2, max|x| 5.50e-1, run-to-run relL1 1.1e-7
+production                         frame  108.551 ms  compute  106.997 (min  102.353)  reduce  0.160  × 1.00    1.89 Gpair/s  relL1 1.1e-7  relMax 4.3e-7
+hp+invTExact fixed64 K1 cheapWrap  frame   35.417 ms  compute   34.317 (min   33.830)  reduce  0.011  × 3.12    5.90 Gpair/s  relL1 1.3e-4  relMax 2.4e-2
+fixed64 K1 spans                   frame   30.494 ms  compute   28.649 (min   27.830)  reduce  0.010  × 3.73    7.07 Gpair/s  relL1 1.3e-4  relMax 2.4e-2
+fixed64 K1 cheapWrap storageVel    frame   29.166 ms  compute   27.343 (min   26.889)  reduce  0.009  × 3.91    7.41 Gpair/s  relL1 1.3e-4  relMax 2.4e-2
+wgCache256 wg64 tiled spans        frame   29.004 ms  compute   27.162 (min   27.022)  reduce  0.009  × 3.94    7.46 Gpair/s  relL1 1.3e-4  relMax 2.4e-2
+wgCache256 wg256 tiled spans       frame   29.198 ms  compute   27.734 (min   26.951)  reduce  0.009  × 3.86    7.31 Gpair/s  relL1 1.3e-4  relMax 2.4e-2
+wgCache256 wg64 tiled spans storageVel frame   29.289 ms  compute   27.451 (min   26.730)  reduce  0.010  × 3.90    7.38 Gpair/s  relL1 1.3e-4  relMax 2.4e-2
+[diag] no accumulation spans       frame   16.948 ms  compute   15.510 (min   15.351)  reduce  0.008  × 6.90   13.07 Gpair/s  relL1 1.0e+0  relMax 1.0e+0
+
+## large · solidBody — grid 256, 6184 offsets (3092 unique per cell, 77 row spans)
+reference: mean|x| 2.68e-2, max|x| 1.76e+3, run-to-run relL1 0.0e+0
+production                         frame 3581.214 ms  compute 3562.840 (min 3562.840)  reduce  0.303  × 1.00    0.06 Gpair/s  relL1 0.0e+0  relMax 0.0e+0
+hp+invTExact fixed64 K1 cheapWrap  frame  135.375 ms  compute  129.908 (min  127.792)  reduce  0.010  ×27.43    1.56 Gpair/s  relL1 7.0e-8  relMax 7.0e-8
+fixed64 K1 spans                   frame  135.765 ms  compute  129.634 (min  129.183)  reduce  0.011  ×27.48    1.56 Gpair/s  relL1 7.0e-8  relMax 7.0e-8
+fixed64 K1 cheapWrap storageVel    frame  135.176 ms  compute  129.146 (min  128.952)  reduce  0.011  ×27.59    1.57 Gpair/s  relL1 7.0e-8  relMax 7.0e-8
+wgCache256 wg64 tiled spans        frame   11.217 ms  compute   10.071 (min    9.930)  reduce  0.011  ×353.76   20.12 Gpair/s  relL1 7.0e-8  relMax 7.0e-8
+wgCache256 wg256 tiled spans       frame   12.786 ms  compute   11.368 (min   11.232)  reduce  0.010  ×313.41   17.83 Gpair/s  relL1 7.0e-8  relMax 7.0e-8
+wgCache256 wg64 tiled spans storageVel frame   11.055 ms  compute    9.396 (min    9.262)  reduce  0.011  ×379.20   21.57 Gpair/s  relL1 7.0e-8  relMax 7.0e-8
+[diag] no accumulation spans       frame    9.557 ms  compute    8.403 (min    8.381)  reduce  0.007  ×423.98   24.11 Gpair/s  relL1 1.0e+0  relMax 1.0e+0
+
+## grid512 · vortices — grid 512, 1024 offsets (512 unique per cell, 26 row spans)
+reference: mean|x| 6.22e-3, max|x| 3.45e+0, run-to-run relL1 8.8e-8
+production                         frame   71.608 ms  compute   67.827 (min   67.242)  reduce  0.428  × 1.00    1.98 Gpair/s  relL1 8.8e-8  relMax 9.7e-7
+hp+invTExact fixed64 K1 cheapWrap  frame   20.297 ms  compute   18.291 (min   16.027)  reduce  0.050  × 3.71    7.34 Gpair/s  relL1 9.1e-5  relMax 1.2e-3
+fixed64 K1 spans                   frame   32.340 ms  compute   32.326 (min   23.633)  reduce  0.057  × 2.10    4.15 Gpair/s  relL1 9.1e-5  relMax 1.2e-3
+fixed64 K1 cheapWrap storageVel    frame   35.618 ms  compute   35.649 (min   30.369)  reduce  0.069  × 1.90    3.77 Gpair/s  relL1 9.1e-5  relMax 1.2e-3
+wgCache256 wg64 tiled spans        frame   31.236 ms  compute   29.924 (min   28.183)  reduce  0.055  × 2.27    4.49 Gpair/s  relL1 9.1e-5  relMax 1.2e-3
+wgCache256 wg256 tiled spans       frame   32.067 ms  compute   30.834 (min   26.001)  reduce  0.061  × 2.20    4.35 Gpair/s  relL1 9.1e-5  relMax 1.2e-3
+wgCache256 wg64 tiled spans storageVel frame   32.727 ms  compute   30.634 (min   26.704)  reduce  0.069  × 2.21    4.38 Gpair/s  relL1 9.1e-5  relMax 1.2e-3
+[diag] no accumulation spans       frame   20.475 ms  compute   18.035 (min   16.601)  reduce  1.310  × 3.76    7.44 Gpair/s  relL1 1.0e+0  relMax 1.0e+0
+
+## grid512 · simulatedSpin — grid 512, 1024 offsets (512 unique per cell, 26 row spans)
+reference: mean|x| 1.90e-3, max|x| 2.11e+1, run-to-run relL1 3.8e-7
+production                         frame  190.035 ms  compute  208.833 (min  130.742)  reduce  1.024  × 1.00    0.64 Gpair/s  relL1 3.4e-7  relMax 1.7e-6
+hp+invTExact fixed64 K1 cheapWrap  frame   44.304 ms  compute   42.258 (min   38.191)  reduce  0.146  × 4.94    3.18 Gpair/s  relL1 1.8e-5  relMax 4.2e-5
+fixed64 K1 spans                   frame   34.393 ms  compute   33.096 (min   31.083)  reduce  0.058  × 6.31    4.06 Gpair/s  relL1 1.8e-5  relMax 4.2e-5
+fixed64 K1 cheapWrap storageVel    frame   34.626 ms  compute   33.163 (min   28.025)  reduce  0.051  × 6.30    4.05 Gpair/s  relL1 1.8e-5  relMax 4.2e-5
+wgCache256 wg64 tiled spans        frame   37.608 ms  compute   36.680 (min   33.772)  reduce  0.064  × 5.69    3.66 Gpair/s  relL1 1.8e-5  relMax 4.2e-5
+wgCache256 wg256 tiled spans       frame   34.787 ms  compute   34.043 (min   32.518)  reduce  0.058  × 6.13    3.94 Gpair/s  relL1 1.8e-5  relMax 4.2e-5
+wgCache256 wg64 tiled spans storageVel frame   73.023 ms  compute   71.594 (min   58.030)  reduce  2.252  × 2.92    1.87 Gpair/s  relL1 1.8e-5  relMax 4.2e-5
+[diag] no accumulation spans       frame   30.965 ms  compute   29.560 (min   21.817)  reduce  0.058  × 7.06    4.54 Gpair/s  relL1 1.0e+0  relMax 1.0e+0
+
+## grid512 · simulatedMixed — grid 512, 1024 offsets (512 unique per cell, 26 row spans)
+reference: mean|x| 5.93e-3, max|x| 3.99e+0, run-to-run relL1 1.0e-7
+production                         frame  166.877 ms  compute  149.859 (min  149.859)  reduce  2.764  × 1.00    0.90 Gpair/s  relL1 9.8e-8  relMax 6.0e-7
+hp+invTExact fixed64 K1 cheapWrap  frame   75.217 ms  compute   77.469 (min   62.107)  reduce  0.093  × 1.93    1.73 Gpair/s  relL1 6.0e-5  relMax 6.0e-4
+fixed64 K1 spans                   frame   51.148 ms  compute   51.136 (min   49.104)  reduce  0.057  × 2.93    2.62 Gpair/s  relL1 6.0e-5  relMax 6.0e-4
+fixed64 K1 cheapWrap storageVel    frame   39.908 ms  compute   37.975 (min   30.295)  reduce  1.149  × 3.95    3.53 Gpair/s  relL1 6.0e-5  relMax 6.0e-4
+wgCache256 wg64 tiled spans        frame   30.273 ms  compute   28.645 (min   27.738)  reduce  0.054  × 5.23    4.69 Gpair/s  relL1 6.0e-5  relMax 6.0e-4
+wgCache256 wg256 tiled spans       frame   28.801 ms  compute   27.243 (min   25.662)  reduce  0.053  × 5.50    4.93 Gpair/s  relL1 6.0e-5  relMax 6.0e-4
+wgCache256 wg64 tiled spans storageVel frame   32.930 ms  compute   32.846 (min   23.920)  reduce  0.034  × 4.56    4.09 Gpair/s  relL1 6.0e-5  relMax 6.0e-4
+[diag] no accumulation spans       frame   49.868 ms  compute   45.331 (min   25.053)  reduce  1.284  × 3.31    2.96 Gpair/s  relL1 1.0e+0  relMax 1.0e+0
+
+## grid512 · whiteNoise — grid 512, 1024 offsets (512 unique per cell, 26 row spans)
+reference: mean|x| 2.35e-2, max|x| 1.64e-1, run-to-run relL1 7.8e-8
+production                         frame  143.383 ms  compute  165.074 (min  129.509)  reduce  1.718  × 1.00    0.81 Gpair/s  relL1 7.6e-8  relMax 3.2e-7
+hp+invTExact fixed64 K1 cheapWrap  frame   49.338 ms  compute   50.378 (min   40.969)  reduce  0.059  × 3.28    2.66 Gpair/s  relL1 9.2e-5  relMax 4.1e-2
+fixed64 K1 spans                   frame   39.372 ms  compute   38.626 (min   38.539)  reduce  0.049  × 4.27    3.47 Gpair/s  relL1 9.2e-5  relMax 4.1e-2
+fixed64 K1 cheapWrap storageVel    frame   32.381 ms  compute   30.672 (min   26.641)  reduce  0.061  × 5.38    4.38 Gpair/s  relL1 9.2e-5  relMax 4.1e-2
+wgCache256 wg64 tiled spans        frame   25.794 ms  compute   24.448 (min   24.056)  reduce  0.051  × 6.75    5.49 Gpair/s  relL1 9.2e-5  relMax 4.1e-2
+wgCache256 wg256 tiled spans       frame   24.107 ms  compute   22.520 (min   19.682)  reduce  0.052  × 7.33    5.96 Gpair/s  relL1 9.2e-5  relMax 4.1e-2
+wgCache256 wg64 tiled spans storageVel frame   27.022 ms  compute   25.262 (min   22.520)  reduce  0.054  × 6.53    5.31 Gpair/s  relL1 9.2e-5  relMax 4.1e-2
+[diag] no accumulation spans       frame   15.539 ms  compute   13.926 (min   12.245)  reduce  0.041  ×11.85    9.64 Gpair/s  relL1 1.0e+0  relMax 1.0e+0
+
+## grid512 · solidBody — grid 512, 1024 offsets (512 unique per cell, 26 row spans)
+reference: mean|x| 1.40e-3, max|x| 3.67e+2, run-to-run relL1 0.0e+0
+production                         frame 5250.890 ms  compute 5234.241 (min 5234.241)  reduce  0.000  × 1.00    0.03 Gpair/s  relL1 0.0e+0  relMax 0.0e+0
+hp+invTExact fixed64 K1 cheapWrap  frame  114.785 ms  compute  110.316 (min  109.822)  reduce  0.041  ×47.45    1.22 Gpair/s  relL1 0.0e+0  relMax 0.0e+0
+fixed64 K1 spans                   frame  115.025 ms  compute  110.429 (min  110.402)  reduce  0.758  ×47.40    1.22 Gpair/s  relL1 0.0e+0  relMax 0.0e+0
+fixed64 K1 cheapWrap storageVel    frame  114.528 ms  compute  110.226 (min  109.894)  reduce  0.934  ×47.49    1.22 Gpair/s  relL1 0.0e+0  relMax 0.0e+0
+wgCache256 wg64 tiled spans        frame    8.795 ms  compute    7.353 (min    7.281)  reduce  0.034  ×711.86   18.25 Gpair/s  relL1 0.0e+0  relMax 0.0e+0
+wgCache256 wg256 tiled spans       frame    8.968 ms  compute    7.544 (min    7.490)  reduce  0.033  ×693.86   17.79 Gpair/s  relL1 0.0e+0  relMax 0.0e+0
+wgCache256 wg64 tiled spans storageVel frame    8.689 ms  compute    7.272 (min    7.216)  reduce  0.034  ×719.81   18.46 Gpair/s  relL1 0.0e+0  relMax 0.0e+0
+[diag] no accumulation spans       frame    6.180 ms  compute    5.072 (min    5.030)  reduce  0.020  ×1032.00   26.46 Gpair/s  relL1 1.0e+0  relMax 1.0e+0

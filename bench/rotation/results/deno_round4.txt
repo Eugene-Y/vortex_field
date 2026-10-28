@@ -1,0 +1,56 @@
+adapter: Apple M3 · timestamps true · subgroups false
+
+## appDefault · simulatedSpin — grid 256, 32 offsets (16 unique per cell, 12 row spans)
+reference: mean|x| 3.77e-4, max|x| 3.63e+0, run-to-run relL1 2.7e-8
+fixed64 K1 spans                   frame    1.028 ms  compute    0.285 (min    0.284)  reduce  0.011  ×  NaN    3.68 Gpair/s  relL1 4.2e-5  relMax 1.0e-4
+wgCache256 wg64 tiled spans        frame    1.333 ms  compute    0.380 (min    0.374)  reduce  0.013  ×  NaN    2.76 Gpair/s  relL1 4.2e-5  relMax 1.0e-4
+wgCache64 wg64 tiled spans         frame    1.145 ms  compute    0.303 (min    0.259)  reduce  0.013  ×  NaN    3.46 Gpair/s  relL1 4.2e-5  relMax 1.0e-4
+wgCache32 wg64 tiled spans         frame    0.997 ms  compute    0.284 (min    0.246)  reduce  0.010  ×  NaN    3.69 Gpair/s  relL1 4.2e-5  relMax 1.0e-4
+
+## appDefault · vortices — grid 256, 32 offsets (16 unique per cell, 12 row spans)
+reference: mean|x| 1.16e-3, max|x| 2.21e-1, run-to-run relL1 3.4e-9
+fixed64 K1 spans                   frame    1.034 ms  compute    0.253 (min    0.223)  reduce  0.013  ×  NaN    4.15 Gpair/s  relL1 7.9e-5  relMax 1.2e-3
+wgCache256 wg64 tiled spans        frame    1.742 ms  compute    0.706 (min    0.482)  reduce  0.021  ×  NaN    1.49 Gpair/s  relL1 7.9e-5  relMax 1.2e-3
+wgCache64 wg64 tiled spans         frame    1.740 ms  compute    0.692 (min    0.615)  reduce  0.021  ×  NaN    1.52 Gpair/s  relL1 7.9e-5  relMax 1.2e-3
+wgCache32 wg64 tiled spans         frame    1.511 ms  compute    0.656 (min    0.369)  reduce  0.020  ×  NaN    1.60 Gpair/s  relL1 7.9e-5  relMax 1.2e-3
+
+## appDefault · solidBody — grid 256, 32 offsets (16 unique per cell, 12 row spans)
+reference: mean|x| 1.76e-4, max|x| 1.15e+1, run-to-run relL1 0.0e+0
+fixed64 K1 spans                   frame    1.628 ms  compute    0.782 (min    0.776)  reduce  0.008  ×  NaN    1.34 Gpair/s  relL1 0.0e+0  relMax 0.0e+0
+wgCache256 wg64 tiled spans        frame    0.956 ms  compute    0.130 (min    0.130)  reduce  0.007  ×  NaN    8.09 Gpair/s  relL1 0.0e+0  relMax 0.0e+0
+wgCache64 wg64 tiled spans         frame    0.928 ms  compute    0.126 (min    0.113)  reduce  0.010  ×  NaN    8.30 Gpair/s  relL1 0.0e+0  relMax 0.0e+0
+wgCache32 wg64 tiled spans         frame    1.227 ms  compute    0.201 (min    0.154)  reduce  0.014  ×  NaN    5.20 Gpair/s  relL1 0.0e+0  relMax 0.0e+0
+
+## medium · simulatedSpin — grid 256, 1024 offsets (512 unique per cell, 26 row spans)
+reference: mean|x| 7.33e-3, max|x| 1.15e+2, run-to-run relL1 6.7e-8
+fixed64 K1 spans                   frame    5.882 ms  compute    4.625 (min    4.544)  reduce  0.008  ×  NaN    7.26 Gpair/s  relL1 1.1e-5  relMax 2.7e-6
+wgCache256 wg64 tiled spans        frame    5.152 ms  compute    3.987 (min    3.850)  reduce  0.008  ×  NaN    8.42 Gpair/s  relL1 1.1e-5  relMax 2.7e-6
+wgCache64 wg64 tiled spans         frame    5.101 ms  compute    3.875 (min    3.848)  reduce  0.008  ×  NaN    8.66 Gpair/s  relL1 1.1e-5  relMax 2.7e-6
+wgCache32 wg64 tiled spans         frame    4.906 ms  compute    3.808 (min    3.740)  reduce  0.008  ×  NaN    8.81 Gpair/s  relL1 1.1e-5  relMax 2.7e-6
+
+## medium · vortices — grid 256, 1024 offsets (512 unique per cell, 26 row spans)
+reference: mean|x| 2.05e-2, max|x| 3.90e+0, run-to-run relL1 5.0e-8
+fixed64 K1 spans                   frame    4.875 ms  compute    3.687 (min    3.664)  reduce  0.008  ×  NaN    9.10 Gpair/s  relL1 1.3e-4  relMax 1.5e-3
+wgCache256 wg64 tiled spans        frame    4.965 ms  compute    3.830 (min    3.762)  reduce  0.008  ×  NaN    8.76 Gpair/s  relL1 1.3e-4  relMax 1.5e-3
+wgCache64 wg64 tiled spans         frame    4.949 ms  compute    3.684 (min    3.664)  reduce  0.008  ×  NaN    9.11 Gpair/s  relL1 1.3e-4  relMax 1.5e-3
+wgCache32 wg64 tiled spans         frame    4.912 ms  compute    3.777 (min    3.689)  reduce  0.008  ×  NaN    8.88 Gpair/s  relL1 1.3e-4  relMax 1.5e-3
+
+## medium · solidBody — grid 256, 1024 offsets (512 unique per cell, 26 row spans)
+reference: mean|x| 5.37e-3, max|x| 3.52e+2, run-to-run relL1 0.0e+0
+fixed64 K1 spans                   frame   28.379 ms  compute   25.842 (min   25.791)  reduce  0.011  ×  NaN    1.30 Gpair/s  relL1 2.6e-7  relMax 2.6e-7
+wgCache256 wg64 tiled spans        frame    2.863 ms  compute    1.894 (min    1.884)  reduce  0.008  ×  NaN   17.71 Gpair/s  relL1 2.6e-7  relMax 2.6e-7
+wgCache64 wg64 tiled spans         frame    2.755 ms  compute    1.872 (min    1.855)  reduce  0.010  ×  NaN   17.92 Gpair/s  relL1 2.6e-7  relMax 2.6e-7
+wgCache32 wg64 tiled spans         frame    2.778 ms  compute    1.828 (min    1.821)  reduce  0.010  ×  NaN   18.36 Gpair/s  relL1 2.6e-7  relMax 2.6e-7
+adapter: Apple M3 · timestamps true · subgroups false
+
+## grid1024 · vortices — grid 1024, 452 offsets (226 unique per cell, 46 row spans)
+reference: mean|x| 8.31e-4, max|x| 6.96e-1, run-to-run relL1 6.6e-8
+production                         frame  169.918 ms  compute  151.270 (min  151.270)  reduce  0.000  × 1.00    1.57 Gpair/s  relL1 6.4e-8  relMax 1.3e-6
+fixed64 K1 spans                   frame   79.142 ms  compute   75.124 (min   74.314)  reduce  0.140  × 2.01    3.15 Gpair/s  relL1 9.4e-5  relMax 5.7e-3
+wgCache256 wg64 tiled spans        frame   66.563 ms  compute   63.988 (min   63.463)  reduce  0.141  × 2.36    3.70 Gpair/s  relL1 9.4e-5  relMax 5.7e-3
+
+## grid1024 · solidBody — grid 1024, 452 offsets (226 unique per cell, 46 row spans)
+reference: mean|x| 1.56e-4, max|x| 1.63e+2, run-to-run relL1 1.1e-4
+production                         frame 9357.970 ms  compute 9336.868 (min 9336.868)  reduce  0.000  × 1.00    0.03 Gpair/s  relL1 4.9e-5  relMax 4.9e-5
+fixed64 K1 spans                   frame  209.862 ms  compute  194.777 (min  194.777)  reduce  1.561  ×47.94    1.22 Gpair/s  relL1 7.9e-4  relMax 7.9e-4
+wgCache256 wg64 tiled spans        frame   16.631 ms  compute   15.040 (min   14.933)  reduce  0.133  ×620.80   15.76 Gpair/s  relL1 7.9e-4  relMax 7.9e-4

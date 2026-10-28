@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Field B benchmark</title>
+<style>
+  body { background: #111; color: #ddd; font: 12px/1.4 ui-monospace, Menlo, monospace; margin: 16px; }
+  pre  { white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<p>Query: <code>?configs=medium,large&amp;scenarios=vortices&amp;variants=production,fixed64K1</code></p>
+<pre id="log"></pre>
+<script type="module">
+'use strict';
+
+import { runRotationBenchmark } from './RotationBenchmark.js';
+import { CONFIGS, VARIANTS, DEFAULT_VARIANT_KEYS, SUBGROUP_VARIANT_KEYS } from './BenchmarkPlan.js';
+
+const logElement = document.getElementById('log');
+const log = line => { logElement.textContent += line + '\n'; };
+
+async function readRepoText(path) {
+  const response = await fetch(`../../${path}`, { cache: 'reload' });
+  return response.text();
+}
+
+async function main() {
+  const query = new URLSearchParams(location.search);
+  const keyList = (name, fallback) => query.has(name) ? query.get(name).split(',') : fallback;
+
+  const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
+  const timestampSupported = adapter.features.has('timestamp-query');
+  const subgroupsSupported = adapter.features.has('subgroups');
+  const requiredFeatures = [];
+  if (timestampSupported) requiredFeatures.push('timestamp-query');
+  if (subgroupsSupported) requiredFeatures.push('subgroups');
+  const device = await adapter.requestDevice({
+    requiredFeatures,
+    requiredLimits: { maxStorageBufferBindingSize: adapter.limits.maxStorageBufferBindingSize, maxBufferSize: adapter.limits.maxBufferSize },
+  });
+  device.addEventListener('uncapturederror', event => log(`GPU error: ${event.error.message}`));
+
+  log(`${navigator.userAgent}`);
+  log(`adapter: ${adapter.info?.vendor} ${adapter.info?.architecture} · timestamps ${timestampSupported} · subgroups ${subgroupsSupported}` +
+    ` (${adapter.info?.subgroupMinSize}–${adapter.info?.subgroupMaxSize})`);
+
+  const defaultVariants = subgroupsSupported ? [...DEFAULT_VARIANT_KEYS, ...SUBGROUP_VARIANT_KEYS] : DEFAULT_VARIANT_KEYS;
+  await runRotationBenchmark({
+    device,
+    productionSources: {
+      compute: await readRepoText('src/shaders/rotation_compute.wgsl'),
+      reduce:  await readRepoText('src/shaders/rotation_reduce.wgsl'),
+    },
+    configs:   keyList('configs', ['appDefault', 'medium']).map(key => CONFIGS[key]),
+    scenarios: keyList('scenarios', ['vortices', 'solidBody', 'whiteNoise']),
+    variants:  keyList('variants', defaultVariants).map(key => VARIANTS[key]),
+    log,
+    timestampSupported,
+    loadFieldFile: async fileName => (await fetch(`fields/${fileName}`)).arrayBuffer(),
+  });
+  log('\nDONE');
+}
+
+main().catch(error => log(`FAILED: ${error.stack ?? error}`));
+</script>
+</body>
+</html>
