@@ -206,7 +206,7 @@ export const COLORS = {
 ## UI Controls
 
 `ControlPanel.js` builds all sliders from DOM. Available slider types:
-- `_addLogSlider` — log-scaled, center = default value at construction
+- `_addLogSlider` — log-scaled
 - `_addLinearSlider` — linear, float display
 - `_addIntSlider` — linear, integer display
 - `_addSlider` — generic; caller supplies `formatValue` and `onChange` for custom curves
@@ -216,6 +216,8 @@ export const COLORS = {
   in `ROTATION_FIELD.showMask`; active = full opacity, inactive = 0.35 opacity
 
 Physics sliders appear below Field A. Brightness sliders appear below their respective field.
+Double-clicking any slider resets it to its value in `DEFAULTS` (not the URL value it
+loaded with); every slider helper takes that default next to its getter and setter.
 
 Current sliders:
 - **Brightness** (under each field) — adjusts tone midpoints
@@ -440,6 +442,7 @@ The code must be written so the following changes require minimal surgery:
   `_addSlider()`, or `_addSymmetricPowerSlider()`
 - Every new control gets a hint: add its text to `CONTROL_HINTS` in `ControlPanel.js` and pass it
   to the slider helper (it becomes a `data-hint` attribute shown under the fields on hover).
+- Every new slider gets its factory default from `DEFAULTS` (double-click resets to it).
 - Every new control **must** have a corresponding URL parameter: add it to `DEFAULTS`,
   parse it with `_float`/`_int`/`_str` in `PHYSICS_DEFAULTS` / `MOUSE_DEFAULTS` / etc.,
   and serialize it in `buildShareUrl()`. This is required — share URLs must fully

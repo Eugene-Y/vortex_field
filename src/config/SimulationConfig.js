@@ -16,8 +16,9 @@ export const hexToRgb = hex => [0, 2, 4]
   .map(offset => parseInt(hex.slice(offset, offset + 2), 16) / COLOR_CHANNEL_MAX);
 const _color = (key, def) => { const v = _p.get(key); return v && HEX_COLOR_PATTERN.test(v) ? hexToRgb(v) : def; };
 
-// All tuneable defaults live here. URL params override them on load.
-const DEFAULTS = {
+// All tuneable defaults live here. URL params override them on load; double-clicking a
+// slider restores its value from here.
+export const DEFAULTS = {
   gridSize:          512,
   dampingLoss:       1e-7, // = 1 - damping; stored as loss for URL precision
   simSpeed:          1.0,
@@ -32,6 +33,10 @@ const DEFAULTS = {
   velBrightness:      46,   // slider position 0–100
   rotBrightness:      55,   // slider position 0–100; 50 = midpoint = 1× normalized mean
   densBrightness:     50,   // slider position 0–100
+  sampleStride:       1,
+  gravStrength:       5.0,
+  gravIters:          20,
+  densDamping:        0.999,
 };
 
 const VEL_TONE_BASE  = 30.0;
@@ -92,9 +97,9 @@ export const BRUSH = {
 
 export const GRAVITY = {
   enabled:        GRAVITY_EXPERIMENT && _int('gravEnabled', 0, 0, 1) === 1,
-  strength:       _float('gravStrength', 5.0),
-  iterations:     _int('gravIters', 20, 1, 100),
-  densityDamping: _float('densDamping', 0.999),
+  strength:       _float('gravStrength', DEFAULTS.gravStrength),
+  iterations:     _int('gravIters', DEFAULTS.gravIters, 1, 100),
+  densityDamping: _float('densDamping', DEFAULTS.densDamping),
 };
 
 export const ROTATION_FIELD = {
@@ -103,7 +108,7 @@ export const ROTATION_FIELD = {
   pairDistance:      _float('pairDistance', DEFAULTS.pairDistance),
   distanceDelta:     _float('distanceDelta', DEFAULTS.distanceDelta),
   showMask:          _int('showMask', 1, 0, 3),
-  sampleStride:      _int('sampleStride', 1, 1, 32),
+  sampleStride:      _int('sampleStride', DEFAULTS.sampleStride, 1, 32),
   autoNormalize:     _int('autoNorm', 1, 0, 1),
   maskCenter:        (_p.has('maskCx') && _p.has('maskCy'))
     ? [_float('maskCx', 0), _float('maskCy', 0)]

@@ -1,6 +1,6 @@
 'use strict';
 
-import { RENDER_DEFAULTS, BRIGHTNESS_SLIDER_POSITIONS, PHYSICS_DEFAULTS, MOUSE_DEFAULTS, ROTATION_FIELD, VEL_LOG_RANGE, ROT_DIM_LOG_RANGE, ROT_BRIGHT_LOG_RANGE, DENS_LOG_RANGE, GRAVITY, GRAVITY_EXPERIMENT, BRUSH, COLORS, rgbToHex, hexToRgb } from '../config/SimulationConfig.js';
+import { DEFAULTS, RENDER_DEFAULTS, BRIGHTNESS_SLIDER_POSITIONS, PHYSICS_DEFAULTS, MOUSE_DEFAULTS, ROTATION_FIELD, VEL_LOG_RANGE, ROT_DIM_LOG_RANGE, ROT_BRIGHT_LOG_RANGE, DENS_LOG_RANGE, GRAVITY, GRAVITY_EXPERIMENT, BRUSH, COLORS, rgbToHex, hexToRgb } from '../config/SimulationConfig.js';
 
 const VEL_TONE_BASE  = 30.0;
 const ROT_TONE_BASE  = 1.0;
@@ -10,6 +10,17 @@ const VORTICITY_MAX      = 50.0;
 const VORTICITY_EXPONENT = 2.0;   // >1 gives finer steps near zero
 
 const PAIR_DISTANCE_SLIDER_STEPS = 1000;
+
+const RESET_HINT = 'Double-click to reset.';
+
+// Slider steps rarely land exactly on a default (brush radius 2 → 1.97 on a log scale),
+// so the step nearest the default stands for the default itself; resetting gives it exactly.
+const snapToDefault = (sliderValue, defaultSliderValue, defaultValue, steppedValue) =>
+  sliderValue === defaultSliderValue ? defaultValue : steppedValue;
+
+const linearSliderValue = (value, min, max) => Math.max(0, Math.min(100, Math.round((value - min) / (max - min) * 100)));
+
+const vorticityToSliderValue = strength => Math.round(Math.pow(strength / VORTICITY_MAX, 1 / VORTICITY_EXPONENT) * 100);
 
 const CONTROL_HINTS = {
   velocityBrightness: 'Field A brightness. Move right to make slow flow visible.',
@@ -45,11 +56,11 @@ export class ControlPanel {
     velocityContainer.style.width = `${fieldSize}px`;
     rotationContainer.style.width = `${fieldSize}px`;
 
-    this._addBrightnessSlider(velocityContainer, 'Brightness', RENDER_DEFAULTS, 'velocityToneMidpoint', VEL_TONE_BASE, VEL_LOG_RANGE, VEL_LOG_RANGE, BRIGHTNESS_SLIDER_POSITIONS.velocity, 'velocity', CONTROL_HINTS.velocityBrightness);
+    this._addBrightnessSlider(velocityContainer, 'Brightness', RENDER_DEFAULTS, 'velocityToneMidpoint', VEL_TONE_BASE, VEL_LOG_RANGE, VEL_LOG_RANGE, BRIGHTNESS_SLIDER_POSITIONS.velocity, DEFAULTS.velBrightness, 'velocity', CONTROL_HINTS.velocityBrightness);
     if (GRAVITY_EXPERIMENT) {
-      this._addBrightnessSlider(velocityContainer, 'Mass brightness', RENDER_DEFAULTS, 'densityToneMidpoint', DENS_TONE_BASE, DENS_LOG_RANGE, DENS_LOG_RANGE, BRIGHTNESS_SLIDER_POSITIONS.density, 'density', CONTROL_HINTS.massBrightness);
+      this._addBrightnessSlider(velocityContainer, 'Mass brightness', RENDER_DEFAULTS, 'densityToneMidpoint', DENS_TONE_BASE, DENS_LOG_RANGE, DENS_LOG_RANGE, BRIGHTNESS_SLIDER_POSITIONS.density, DEFAULTS.densBrightness, 'density', CONTROL_HINTS.massBrightness);
     }
-    const rotBrightnessRow = this._addBrightnessSlider(rotationContainer, 'Brightness', RENDER_DEFAULTS, 'rotationToneMidpoint', ROT_TONE_BASE, ROT_DIM_LOG_RANGE, ROT_BRIGHT_LOG_RANGE, BRIGHTNESS_SLIDER_POSITIONS.rotation, 'rotation', CONTROL_HINTS.rotationBrightness);
+    const rotBrightnessRow = this._addBrightnessSlider(rotationContainer, 'Brightness', RENDER_DEFAULTS, 'rotationToneMidpoint', ROT_TONE_BASE, ROT_DIM_LOG_RANGE, ROT_BRIGHT_LOG_RANGE, BRIGHTNESS_SLIDER_POSITIONS.rotation, DEFAULTS.rotBrightness, 'rotation', CONTROL_HINTS.rotationBrightness);
     this._addAutoNormalizeButton(rotBrightnessRow);
 
     this._buildPhysicsSliders(physicsContainer);
@@ -60,18 +71,21 @@ export class ControlPanel {
     const patternRow = this._addLinearSlider(container, 'Pattern size', 0, 1,
       () => MOUSE_DEFAULTS.patternScale,
       v => { MOUSE_DEFAULTS.patternScale = v; },
+      DEFAULTS.patternScale,
       CONTROL_HINTS.patternSize
     );
     this._addContributionToggles(container);
     this._addLogSlider(container, 'Pair distance', 0.001, 1.0,
       () => ROTATION_FIELD.pairDistance,
       v => { ROTATION_FIELD.pairDistance = v; },
+      DEFAULTS.pairDistance,
       CONTROL_HINTS.pairDistance,
       PAIR_DISTANCE_SLIDER_STEPS
     );
     this._addLogSlider(container, 'Distance delta', 0.001, 1.0,
       () => ROTATION_FIELD.distanceDelta,
       v => { ROTATION_FIELD.distanceDelta = v; },
+      DEFAULTS.distanceDelta,
       CONTROL_HINTS.distanceDelta
     );
     this._addSlider({
@@ -79,6 +93,7 @@ export class ControlPanel {
       label: 'Sample stride',
       steps: 5,
       initialSliderValue: Math.log2(ROTATION_FIELD.sampleStride),
+      defaultSliderValue: Math.log2(DEFAULTS.sampleStride),
       formatValue: v => String(2 ** Math.round(v)),
       onChange: v => { ROTATION_FIELD.sampleStride = 2 ** Math.round(v); },
       hint: CONTROL_HINTS.sampleStride,
@@ -98,16 +113,19 @@ export class ControlPanel {
     const brushRow = this._addLogSlider(container, 'Brush radius', 0.5, 256,
       () => MOUSE_DEFAULTS.impulseRadius,
       v => { MOUSE_DEFAULTS.impulseRadius = v; },
+      DEFAULTS.brushRadius,
       CONTROL_HINTS.brushRadius
     );
     this._appendLogSlider(brushRow, 'Strength', 1, 500,
       () => MOUSE_DEFAULTS.impulseStrength,
       v => { MOUSE_DEFAULTS.impulseStrength = v; },
+      DEFAULTS.brushStrength,
       CONTROL_HINTS.brushStrength
     );
     this._addLinearSlider(container, 'Speed sensitivity', 0, 1,
       () => MOUSE_DEFAULTS.speedSensitivity,
       v => { MOUSE_DEFAULTS.speedSensitivity = v; },
+      DEFAULTS.brushSpeed,
       CONTROL_HINTS.speedSensitivity
     );
   }
@@ -130,19 +148,22 @@ export class ControlPanel {
     this._addLogSlider(container, 'dt', 0.1, 10.0,
       () => PHYSICS_DEFAULTS.simulationSpeed,
       v => { PHYSICS_DEFAULTS.simulationSpeed = v; },
+      DEFAULTS.simSpeed,
       CONTROL_HINTS.dt
     );
     // Works in loss space (1 − damping) so the log scale can resolve retention values just below 1.
     this._addLogSlider(container, 'Damping loss', 0.000000001, 0.2,
       () => 1 - PHYSICS_DEFAULTS.damping,
       v => { PHYSICS_DEFAULTS.damping = 1 - v; },
+      DEFAULTS.dampingLoss,
       CONTROL_HINTS.dampingLoss
     );
     this._addSlider({
       container,
       label: 'Vorticity',
       steps: 100,
-      initialSliderValue: Math.round(Math.pow(PHYSICS_DEFAULTS.vorticityStrength / VORTICITY_MAX, 1 / VORTICITY_EXPONENT) * 100),
+      initialSliderValue: vorticityToSliderValue(PHYSICS_DEFAULTS.vorticityStrength),
+      defaultSliderValue: vorticityToSliderValue(DEFAULTS.vorticity),
       formatValue: t => (VORTICITY_MAX * Math.pow(t / 100, VORTICITY_EXPONENT)).toFixed(2),
       onChange:    t => { PHYSICS_DEFAULTS.vorticityStrength = VORTICITY_MAX * Math.pow(t / 100, VORTICITY_EXPONENT); },
       hint: CONTROL_HINTS.vorticity,
@@ -152,6 +173,7 @@ export class ControlPanel {
     this._addIntSlider(container, 'Incompressibility (gas->liquid)', 1, 100,
       () => 101 - PHYSICS_DEFAULTS.pressureIterations,
       v => { PHYSICS_DEFAULTS.pressureIterations = 101 - v; },
+      101 - DEFAULTS.pressureIterations,
       CONTROL_HINTS.incompressibility
     );
   }
@@ -212,21 +234,24 @@ export class ControlPanel {
     this._addLogSlider(container, 'Gravity strength', 0.01, 500,
       () => GRAVITY.strength,
       v => { GRAVITY.strength = v; },
+      DEFAULTS.gravStrength,
       CONTROL_HINTS.gravityStrength
     );
     this._addIntSlider(container, 'Gravity iterations', 1, 80,
       () => GRAVITY.iterations,
       v => { GRAVITY.iterations = v; },
+      DEFAULTS.gravIters,
       CONTROL_HINTS.gravityIterations
     );
     this._addLogSlider(container, 'Mass damping', 0.9, 1.0,
       () => GRAVITY.densityDamping,
       v => { GRAVITY.densityDamping = v; },
+      DEFAULTS.densDamping,
       CONTROL_HINTS.massDamping
     );
   }
 
-  _addBrightnessSlider(container, label, config, key, toneBase, dimLogRange, brightLogRange, initialSliderValue, positionKey, hint) {
+  _addBrightnessSlider(container, label, config, key, toneBase, dimLogRange, brightLogRange, initialSliderValue, defaultSliderValue, positionKey, hint) {
     const applyPosition = sliderValue => {
       const t = (50 - sliderValue) / 50;
       config[key] = toneBase * Math.exp((t >= 0 ? dimLogRange : brightLogRange) * t);
@@ -237,6 +262,7 @@ export class ControlPanel {
       container,
       label,
       initialSliderValue,
+      defaultSliderValue,
       formatValue: null,
       onChange: applyPosition,
       hint,
@@ -257,18 +283,19 @@ export class ControlPanel {
 
   // Power-curve slider symmetric around center (maps to mid of [min,max]).
   // Exponent > 1 gives finer control near center; exponent = 1 is linear.
-  _addSymmetricPowerSlider(container, label, min, max, exponent, getValue, setValue, hint = null, steps = 100, decimals = 3) {
+  _addSymmetricPowerSlider(container, label, min, max, exponent, getValue, setValue, defaultValue, hint = null, steps = 100, decimals = 3) {
     const mid = (min + max) / 2;
     const halfRange = (max - min) / 2;
     const half = steps / 2;
     const toSlider = v => Math.sign(v - mid) * Math.pow(Math.abs((v - mid) / halfRange), exponent) * half + half;
     const fromSlider = t => mid + Math.sign(t - half) * Math.pow(Math.abs((t - half) / half), 1 / exponent) * halfRange;
-    const initialSliderValue = Math.round(Math.max(0, Math.min(steps, toSlider(getValue()))));
+    const clampedSliderValue = v => Math.round(Math.max(0, Math.min(steps, toSlider(v))));
 
     this._addSlider({
       container,
       label,
-      initialSliderValue,
+      initialSliderValue: clampedSliderValue(getValue()),
+      defaultSliderValue: clampedSliderValue(defaultValue),
       steps,
       formatValue: sliderValue => fromSlider(sliderValue).toFixed(decimals),
       onChange: sliderValue => setValue(fromSlider(sliderValue)),
@@ -276,14 +303,12 @@ export class ControlPanel {
     });
   }
 
-  _addIntSlider(container, label, min, max, getValue, setValue, hint) {
-    const defaultValue = getValue();
-    const initialSliderValue = Math.round((defaultValue - min) / (max - min) * 100);
-
+  _addIntSlider(container, label, min, max, getValue, setValue, defaultValue, hint) {
     this._addSlider({
       container,
       label,
-      initialSliderValue: Math.max(0, Math.min(100, initialSliderValue)),
+      initialSliderValue: linearSliderValue(getValue(), min, max),
+      defaultSliderValue: linearSliderValue(defaultValue, min, max),
       formatValue: sliderValue => {
         const v = Math.round(min + (max - min) * sliderValue / 100);
         return String(v);
@@ -295,58 +320,56 @@ export class ControlPanel {
     });
   }
 
-  _addLinearSlider(container, label, min, max, getValue, setValue, hint) {
-    const defaultValue = getValue();
-    const initialSliderValue = Math.round((defaultValue - min) / (max - min) * 100);
-
+  _addLinearSlider(container, label, min, max, getValue, setValue, defaultValue, hint) {
+    const defaultSliderValue = linearSliderValue(defaultValue, min, max);
+    const sliderValueToNatural = sliderValue => snapToDefault(
+      sliderValue, defaultSliderValue, defaultValue, min + (max - min) * sliderValue / 100);
     return this._addSlider({
       container,
       label,
-      initialSliderValue: Math.max(0, Math.min(100, initialSliderValue)),
-      formatValue: sliderValue => {
-        const v = min + (max - min) * sliderValue / 100;
-        return v.toFixed(2);
-      },
-      onChange: sliderValue => {
-        setValue(min + (max - min) * sliderValue / 100);
-      },
+      initialSliderValue: linearSliderValue(getValue(), min, max),
+      defaultSliderValue,
+      formatValue: sliderValue => sliderValueToNatural(sliderValue).toFixed(2),
+      onChange:    sliderValue => { setValue(sliderValueToNatural(sliderValue)); },
       hint,
     });
   }
 
-  // Log-scaled slider. getValue/setValue work in the natural value space (what gets stored).
-  // Slider center always corresponds to the current default value at construction time.
-  _addLogSlider(container, label, min, max, getValue, setValue, hint, steps = 100) {
+  // Log-scaled slider. getValue/setValue/defaultValue work in the natural value space (what gets stored).
+  _addLogSlider(container, label, min, max, getValue, setValue, defaultValue, hint, steps = 100) {
     return this._addSlider({
       container,
       label,
       hint,
-      ...this._logSliderOptions(min, max, getValue, setValue, steps),
+      ...this._logSliderOptions(min, max, getValue, setValue, defaultValue, steps),
     });
   }
 
   // Use when two sliders share one control-row, e.g. brush radius + strength.
-  _appendLogSlider(row, label, min, max, getValue, setValue, hint) {
+  _appendLogSlider(row, label, min, max, getValue, setValue, defaultValue, hint) {
     row.appendChild(this._createSliderBox({
       label,
       hint,
-      ...this._logSliderOptions(min, max, getValue, setValue),
+      ...this._logSliderOptions(min, max, getValue, setValue, defaultValue),
     }));
   }
 
-  _logSliderOptions(min, max, getValue, setValue, steps = 100) {
+  _logSliderOptions(min, max, getValue, setValue, defaultValue, steps = 100) {
     const logMin = Math.log(min);
     const logMax = Math.log(max);
-    const sliderValueToNatural = sliderValue => Math.exp(logMin + (logMax - logMin) * sliderValue / steps);
-    const initialSliderValue = Math.max(0, Math.min(steps, Math.round(
-      (Math.log(getValue()) - logMin) / (logMax - logMin) * steps
+    const naturalToSliderValue = value => Math.max(0, Math.min(steps, Math.round(
+      (Math.log(value) - logMin) / (logMax - logMin) * steps
     )));
+    const defaultSliderValue = naturalToSliderValue(defaultValue);
+    const sliderValueToNatural = sliderValue => snapToDefault(
+      sliderValue, defaultSliderValue, defaultValue, Math.exp(logMin + (logMax - logMin) * sliderValue / steps));
     const formatValue = sliderValue => {
       const v = sliderValueToNatural(sliderValue);
       return v < 0.001 ? v.toExponential(1) : v.toPrecision(3);
     };
     return {
-      initialSliderValue,
+      initialSliderValue: naturalToSliderValue(getValue()),
+      defaultSliderValue,
       steps,
       formatValue,
       onChange: sliderValue => { setValue(sliderValueToNatural(sliderValue)); },
@@ -481,19 +504,19 @@ export class ControlPanel {
     return wrapper;
   }
 
-  _addSlider({ container, label, initialSliderValue, formatValue, onChange, hint = null, steps = 100 }) {
+  _addSlider({ container, label, initialSliderValue, defaultSliderValue, formatValue, onChange, hint = null, steps = 100 }) {
     const wrapper = document.createElement('div');
     wrapper.className = 'control-row';
-    wrapper.appendChild(this._createSliderBox({ label, initialSliderValue, formatValue, onChange, hint, steps }));
+    wrapper.appendChild(this._createSliderBox({ label, initialSliderValue, defaultSliderValue, formatValue, onChange, hint, steps }));
     container.appendChild(wrapper);
     return wrapper;
   }
 
   // A rectangle whose whole area is the range input; label and value are drawn on top of it.
-  _createSliderBox({ label, initialSliderValue, formatValue, onChange, hint = null, steps = 100 }) {
+  _createSliderBox({ label, initialSliderValue, defaultSliderValue, formatValue, onChange, hint = null, steps = 100 }) {
     const box = document.createElement('div');
     box.className = 'slider-box';
-    this._setHint(box, hint);
+    this._setHint(box, hint ? `${hint} ${RESET_HINT}` : RESET_HINT);
 
     const slider = document.createElement('input');
     slider.type = 'range';
@@ -520,6 +543,11 @@ export class ControlPanel {
       const sliderValue = parseFloat(slider.value);
       onChange(sliderValue);
       showSliderValue(sliderValue);
+    });
+    // A bubbling input event runs onChange here and the page's URL/redraw listener.
+    slider.addEventListener('dblclick', () => {
+      slider.value = defaultSliderValue;
+      slider.dispatchEvent(new Event('input', { bubbles: true }));
     });
 
     box.appendChild(slider);
