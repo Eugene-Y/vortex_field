@@ -133,8 +133,11 @@ No toggle, no split-view switch. Both render every frame.
 Both canvases are WebGPU. They sit inside a flex container
 with `DISPLAY_GAP` (px) of space between them.
 
-Each canvas size is computed dynamically from `window.innerWidth` and `window.innerHeight`
-so both fields always fit on screen at the largest integer multiple of `DISPLAY_SCALE` that fits.
+Each canvas size is computed once at load (`computeFieldLayout` in `main.js`) from
+`window.innerWidth` and `window.innerHeight`: the largest integer pixels-per-cell up to
+`DISPLAY_SCALE` that fits. When the two fields do not fit side by side at one pixel per
+cell, each field with its controls is stacked under the other (`#fields.fields-stacked`)
+and the page scrolls vertically.
 
 **Field A** — velocity magnitude mapped to brightness via HSV (hue = direction, value = speed).
 Brightness uses Reinhard tonemapping: `x / (x + c)` where `c = velocityToneMidpoint`.

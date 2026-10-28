@@ -10,15 +10,23 @@ import { PatternInjector }         from './interaction/PatternInjector.js';
 import { FocusMaskInteractor }     from './interaction/FocusMaskInteractor.js';
 import { GRID_SIZE, DISPLAY_SCALE, DISPLAY_GAP, PHYSICS_DEFAULTS, GRAVITY_EXPERIMENT, buildShareUrl } from './config/SimulationConfig.js';
 
-const CANVAS_FIELD_SIZE = computeFieldPixelSize();
+const RESERVED_VERTICAL_PX   = 180;
+const RESERVED_HORIZONTAL_PX = 48;
 
-function computeFieldPixelSize() {
-  const reservedVertical   = 180;
-  const reservedHorizontal = 48;
-  const maxFromWidth  = Math.floor((window.innerWidth  - reservedHorizontal - DISPLAY_GAP) / 2 / GRID_SIZE);
-  const maxFromHeight = Math.floor((window.innerHeight - reservedVertical) / GRID_SIZE);
-  const scale = Math.max(1, Math.min(DISPLAY_SCALE, maxFromWidth, maxFromHeight));
-  return GRID_SIZE * scale;
+const FIELD_LAYOUT      = computeFieldLayout();
+const CANVAS_FIELD_SIZE = FIELD_LAYOUT.fieldPixelSize;
+
+// Side by side when both fields fit the window width at one pixel per cell; otherwise each
+// field with its controls is stacked under the other and the page scrolls vertically.
+function computeFieldLayout() {
+  const availableWidth  = window.innerWidth  - RESERVED_HORIZONTAL_PX;
+  const availableHeight = window.innerHeight - RESERVED_VERTICAL_PX;
+  const scaleFromHeight     = Math.floor(availableHeight / GRID_SIZE);
+  const sideBySideFromWidth = Math.floor((availableWidth - DISPLAY_GAP) / 2 / GRID_SIZE);
+  const stacked        = sideBySideFromWidth < 1;
+  const scaleFromWidth = stacked ? Math.floor(availableWidth / GRID_SIZE) : sideBySideFromWidth;
+  const scale = Math.max(1, Math.min(DISPLAY_SCALE, scaleFromWidth, scaleFromHeight));
+  return { fieldPixelSize: GRID_SIZE * scale, stacked };
 }
 
 async function loadShaderSource(path) {
@@ -123,7 +131,9 @@ async function main() {
   configureCanvas(canvasRotation);
 
   // Set the gap between the two field wrappers to match DISPLAY_GAP.
-  document.getElementById('fields').style.gap = `${DISPLAY_GAP}px`;
+  const fieldsContainer = document.getElementById('fields');
+  fieldsContainer.style.gap = `${DISPLAY_GAP}px`;
+  fieldsContainer.classList.toggle('fields-stacked', FIELD_LAYOUT.stacked);
 
   let gpuDevice;
   try {
