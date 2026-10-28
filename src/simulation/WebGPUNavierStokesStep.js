@@ -7,6 +7,11 @@ import { UniformWriter } from '../gpu/UniformWriter.js';
 
 const WORKGROUP_SIZE = 8; // threads per dimension; dispatch is ceil(N/8) × ceil(N/8)
 
+// Jacobi pressure steps run inside one dispatch on a workgroup-memory tile. More steps per
+// dispatch mean fewer dispatches but a thicker tile border of redundant arithmetic.
+const PRESSURE_ITERATIONS_PER_DISPATCH = 4;
+const PRESSURE_TILE_SIZE               = 32;  // must match TILE_SIZE in velocity_pressure.wgsl
+
 /**
  * Physics step implementation: incompressible Navier-Stokes, fully on WebGPU.
  *
@@ -41,6 +46,7 @@ export class WebGPUNavierStokesStep {
     this._curlTexture       = this._createRTexture();
     this._velocityReadIdx   = 0;
     this._pressureReadIdx   = 0;
+    this._bindGroupCache    = new Map();
 
     // Ping-pong textures for density field and gravity potential (r32float).
     this._densityTextures          = [this._createRTexture(), this._createRTexture()];
@@ -56,6 +62,10 @@ export class WebGPUNavierStokesStep {
     // Uniform buffers — velocity field.
     this._advectParamsBuffer      = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     this._baseParamsBuffer        = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    // Full pressure dispatches and the shorter last one need different iteration counts
+    // within one pass, so each has its own uniform buffer.
+    this._pressureBlockParamsBuffer     = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    this._pressureRemainderParamsBuffer = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     this._confinementParamsBuffer = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     this._impulseParamsBuffer     = device.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     this._diskParamsBuffer        = device.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
@@ -73,7 +83,7 @@ export class WebGPUNavierStokesStep {
     // Build compute and render pipelines — velocity field.
     this._advectPipeline       = this._buildComputePipeline(shaderSources.advect,               'advectVelocity');
     this._divergencePipeline   = this._buildComputePipeline(shaderSources.divergence,           'computeDivergence');
-    this._pressurePipeline     = this._buildComputePipeline(shaderSources.pressure,             'jacobiPressureStep');
+    this._pressurePipeline     = this._buildComputePipeline(shaderSources.pressure,             'jacobiPressureBlock');
     this._subtractGradPipeline = this._buildComputePipeline(shaderSources.subtractGradient,     'subtractPressureGradient');
     this._curlPipeline         = this._buildComputePipeline(shaderSources.vorticityCurl,        'computeCurl');
     this._confinePipeline      = this._buildComputePipeline(shaderSources.vorticityConfinement, 'applyVorticityConfinement');
@@ -107,46 +117,46 @@ export class WebGPUNavierStokesStep {
     this._writeAdvectParams(deltaTime);
     this._writeBaseParams();
 
+    // One compute pass for the whole step: WebGPU orders the dispatches of a pass and makes
+    // each one see the previous one's writes, while every extra pass costs GPU idle time.
     const encoder = this._device.createCommandEncoder();
+    const pass    = encoder.beginComputePass();
 
-    this._dispatchCompute(encoder, this._advectPipeline, this._buildAdvectBindGroup());
+    this._dispatch(pass, this._advectPipeline, this._cachedBindGroup(this._buildAdvectBindGroup));
     this._swapVelocity();
 
     if (PHYSICS_DEFAULTS.vorticityStrength > 0) {
       this._writeConfinementParams(deltaTime);
-      this._dispatchCompute(encoder, this._curlPipeline,    this._buildCurlBindGroup());
-      this._dispatchCompute(encoder, this._confinePipeline, this._buildConfinementBindGroup());
+      this._dispatch(pass, this._curlPipeline,    this._cachedBindGroup(this._buildCurlBindGroup));
+      this._dispatch(pass, this._confinePipeline, this._cachedBindGroup(this._buildConfinementBindGroup));
       this._swapVelocity();
     }
 
     if (GRAVITY.enabled) {
       this._writeDensityAdvectParams(deltaTime);
-      this._dispatchCompute(encoder, this._densityAdvectPipeline, this._buildDensityAdvectBindGroup());
+      this._dispatch(pass, this._densityAdvectPipeline, this._cachedBindGroup(this._buildDensityAdvectBindGroup));
       this._swapDensity();
 
       // Gravity potential Jacobi iterations (warm-started from previous frame).
       this._writeGravityPoissonParams();
       for (let i = 0; i < GRAVITY.iterations; i++) {
-        this._dispatchCompute(encoder, this._gravityPoissonPipeline, this._buildGravityPoissonBindGroup());
+        this._dispatch(pass, this._gravityPoissonPipeline, this._cachedBindGroup(this._buildGravityPoissonBindGroup));
         this._swapGravityPotential();
       }
 
       this._writeGravityForceParams(deltaTime);
-      this._dispatchCompute(encoder, this._gravityForcePipeline, this._buildGravityForceBindGroup());
+      this._dispatch(pass, this._gravityForcePipeline, this._cachedBindGroup(this._buildGravityForceBindGroup));
       this._swapVelocity();
     }
 
-    this._dispatchCompute(encoder, this._divergencePipeline, this._buildDivergenceBindGroup());
+    this._dispatch(pass, this._divergencePipeline, this._cachedBindGroup(this._buildDivergenceBindGroup));
 
-    // Pressure Jacobi iterations (warm-started from previous frame).
-    for (let i = 0; i < PHYSICS_DEFAULTS.pressureIterations; i++) {
-      this._dispatchCompute(encoder, this._pressurePipeline, this._buildPressureBindGroup());
-      this._swapPressure();
-    }
+    this._dispatchPressureIterations(pass, PHYSICS_DEFAULTS.pressureIterations);
 
-    this._dispatchCompute(encoder, this._subtractGradPipeline, this._buildSubtractGradBindGroup());
+    this._dispatch(pass, this._subtractGradPipeline, this._cachedBindGroup(this._buildSubtractGradBindGroup));
     this._swapVelocity();
 
+    pass.end();
     this._device.queue.submit([encoder.finish()]);
   }
 
@@ -163,7 +173,7 @@ export class WebGPUNavierStokesStep {
       }],
     });
     renderPass.setPipeline(this._renderPipeline);
-    renderPass.setBindGroup(0, this._buildRenderBindGroup());
+    renderPass.setBindGroup(0, this._cachedBindGroup(this._buildRenderBindGroup));
     renderPass.draw(4);
     renderPass.end();
     this._device.queue.submit([encoder.finish()]);
@@ -172,21 +182,21 @@ export class WebGPUNavierStokesStep {
   /** Injects a Gaussian impulse at position (UV [0,1]) in the given direction. */
   injectImpulse(position, direction, radius, strength) {
     this._writeImpulseParams(position, direction, radius / GRID_SIZE, strength);
-    this._submitSingleCompute(this._impulsePipeline, this._buildImpulseBindGroup());
+    this._submitSingleCompute(this._impulsePipeline, this._cachedBindGroup(this._buildImpulseBindGroup));
     this._swapVelocity();
   }
 
   /** Injects a filled disk (spin / explode / implode). Center and radius in UV [0,1]. */
   injectDisk(center, radiusUv, strength, mode) {
     this._writeDiskParams(center, radiusUv, strength, mode);
-    this._submitSingleCompute(this._diskPipeline, this._buildDiskBindGroup());
+    this._submitSingleCompute(this._diskPipeline, this._cachedBindGroup(this._buildDiskBindGroup));
     this._swapVelocity();
   }
 
   /** Adds per-cell pseudo-random velocity. */
   injectNoise(strength, seed) {
     this._writeNoiseParams(strength, seed);
-    this._submitSingleCompute(this._noisePipeline, this._buildNoiseBindGroup());
+    this._submitSingleCompute(this._noisePipeline, this._cachedBindGroup(this._buildNoiseBindGroup));
     this._swapVelocity();
   }
 
@@ -219,21 +229,21 @@ export class WebGPUNavierStokesStep {
   /** Injects a Gaussian density blob at position (UV [0,1]). */
   injectDensityImpulse(position, radius, strength) {
     this._writeDensityImpulseParams(position, radius / GRID_SIZE, strength);
-    this._submitSingleCompute(this._densityImpulsePipeline, this._buildDensityImpulseBindGroup());
+    this._submitSingleCompute(this._densityImpulsePipeline, this._cachedBindGroup(this._buildDensityImpulseBindGroup));
     this._swapDensity();
   }
 
   /** Injects a filled disk of density. Center and radius in UV [0,1]. */
   injectDensityDisk(center, radiusUv, strength) {
     this._writeDensityDiskParams(center, radiusUv, strength);
-    this._submitSingleCompute(this._densityDiskPipeline, this._buildDensityDiskBindGroup());
+    this._submitSingleCompute(this._densityDiskPipeline, this._cachedBindGroup(this._buildDensityDiskBindGroup));
     this._swapDensity();
   }
 
   /** Adds per-cell pseudo-random density. */
   injectDensityNoise(strength, seed) {
     this._writeDensityNoiseParams(strength, seed);
-    this._submitSingleCompute(this._densityNoisePipeline, this._buildDensityNoiseBindGroup());
+    this._submitSingleCompute(this._densityNoisePipeline, this._cachedBindGroup(this._buildDensityNoiseBindGroup));
     this._swapDensity();
   }
 
@@ -246,6 +256,8 @@ export class WebGPUNavierStokesStep {
     this._curlTexture.destroy();
     this._advectParamsBuffer.destroy();
     this._baseParamsBuffer.destroy();
+    this._pressureBlockParamsBuffer.destroy();
+    this._pressureRemainderParamsBuffer.destroy();
     this._confinementParamsBuffer.destroy();
     this._impulseParamsBuffer.destroy();
     this._diskParamsBuffer.destroy();
@@ -317,18 +329,63 @@ export class WebGPUNavierStokesStep {
 
   // ─── Dispatch helpers ────────────────────────────────────────────────────────
 
-  _dispatchCompute(encoder, pipeline, bindGroup) {
-    const pass = encoder.beginComputePass();
+  // Jacobi pressure iterations, warm-started from the previous frame's solution.
+  _dispatchPressureIterations(pass, iterationCount) {
+    const fullDispatches      = Math.floor(iterationCount / PRESSURE_ITERATIONS_PER_DISPATCH);
+    const remainderIterations = iterationCount % PRESSURE_ITERATIONS_PER_DISPATCH;
+    this._writePressureParams(this._pressureBlockParamsBuffer, PRESSURE_ITERATIONS_PER_DISPATCH);
+    this._writePressureParams(this._pressureRemainderParamsBuffer, remainderIterations);
+
+    const blocks = this._pressureBlocksPerAxis(PRESSURE_ITERATIONS_PER_DISPATCH);
+    for (let i = 0; i < fullDispatches; i++) {
+      pass.setPipeline(this._pressurePipeline);
+      pass.setBindGroup(0, this._cachedBindGroup(this._buildPressureBlockBindGroup));
+      pass.dispatchWorkgroups(blocks, blocks);
+      this._swapPressure();
+    }
+    if (remainderIterations > 0) {
+      const remainderBlocks = this._pressureBlocksPerAxis(remainderIterations);
+      pass.setPipeline(this._pressurePipeline);
+      pass.setBindGroup(0, this._cachedBindGroup(this._buildPressureRemainderBindGroup));
+      pass.dispatchWorkgroups(remainderBlocks, remainderBlocks);
+      this._swapPressure();
+    }
+  }
+
+  // Each workgroup writes the tile minus a border as wide as its iteration count.
+  _pressureBlocksPerAxis(iterationsPerDispatch) {
+    return Math.ceil(this._gridSize / (PRESSURE_TILE_SIZE - 2 * iterationsPerDispatch));
+  }
+
+  _dispatch(pass, pipeline, bindGroup) {
     pass.setPipeline(pipeline);
     pass.setBindGroup(0, bindGroup);
     pass.dispatchWorkgroups(this._workgroupsXY, this._workgroupsXY);
-    pass.end();
   }
 
   _submitSingleCompute(pipeline, bindGroup) {
     const encoder = this._device.createCommandEncoder();
-    this._dispatchCompute(encoder, pipeline, bindGroup);
+    const pass    = encoder.beginComputePass();
+    this._dispatch(pass, pipeline, bindGroup);
+    pass.end();
     this._device.queue.submit([encoder.finish()]);
+  }
+
+  // Every bind group depends only on which texture of each ping-pong pair is current,
+  // so a builder runs once per combination of read indices and its result is reused.
+  _cachedBindGroup(builder) {
+    const pingPongState = `${this._velocityReadIdx}${this._pressureReadIdx}${this._densityReadIdx}${this._gravityPotentialReadIdx}`;
+    let byState = this._bindGroupCache.get(builder);
+    if (!byState) {
+      byState = new Map();
+      this._bindGroupCache.set(builder, byState);
+    }
+    let bindGroup = byState.get(pingPongState);
+    if (!bindGroup) {
+      bindGroup = builder.call(this);
+      byState.set(pingPongState, bindGroup);
+    }
+    return bindGroup;
   }
 
   // ─── Params writing ──────────────────────────────────────────────────────────
@@ -351,6 +408,16 @@ export class WebGPUNavierStokesStep {
       .pad()
       .pad()
       .writeBuffer(this._device, this._baseParamsBuffer);
+  }
+
+  _writePressureParams(buffer, iterationsPerDispatch) {
+    // Field order must match struct PressureParams in velocity_pressure.wgsl.
+    new UniformWriter(16)
+      .u32(this._gridSize)
+      .u32(PHYSICS_DEFAULTS.boundaryMode)
+      .u32(iterationsPerDispatch)
+      .pad()
+      .writeBuffer(this._device, buffer);
   }
 
   _writeConfinementParams(deltaTime) {
@@ -507,14 +574,22 @@ export class WebGPUNavierStokesStep {
     });
   }
 
-  _buildPressureBindGroup() {
+  _buildPressureBlockBindGroup() {
+    return this._buildPressureBindGroup(this._pressureBlockParamsBuffer);
+  }
+
+  _buildPressureRemainderBindGroup() {
+    return this._buildPressureBindGroup(this._pressureRemainderParamsBuffer);
+  }
+
+  _buildPressureBindGroup(paramsBuffer) {
     return this._device.createBindGroup({
       layout:  this._pressurePipeline.getBindGroupLayout(0),
       entries: [
         { binding: 0, resource: this._pressureRead.createView() },
         { binding: 1, resource: this._divergenceTexture.createView() },
         { binding: 2, resource: this._pressureWrite.createView() },
-        { binding: 3, resource: { buffer: this._baseParamsBuffer } },
+        { binding: 3, resource: { buffer: paramsBuffer } },
       ],
     });
   }

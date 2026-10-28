@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Field A profiler</title>
+<style>
+  body { background: #111; color: #ddd; font: 12px/1.4 ui-monospace, Menlo, monospace; margin: 16px; }
+  pre  { white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<p>Query: the app's URL parameters, e.g. <code>?gridSize=512&amp;pressureIters=20</code></p>
+<canvas id="canvas" width="256" height="256"></canvas>
+<pre id="log"></pre>
+<script type="module">
+'use strict';
+
+import { WebGPUNavierStokesStep } from '../../src/simulation/WebGPUNavierStokesStep.js';
+import { GRID_SIZE, PHYSICS_DEFAULTS } from '../../src/config/SimulationConfig.js';
+import { profileFieldAStep } from './FieldAProfiler.js';
+
+const PROFILED_STEPS = 20;
+const RENDER_SAMPLES = 20;
+
+const SHADER_FILES = {
+  advect: 'velocity_advect', divergence: 'velocity_divergence', pressure: 'velocity_pressure',
+  subtractGradient: 'velocity_subtract_gradient', vorticityCurl: 'velocity_vorticity_curl',
+  vorticityConfinement: 'velocity_vorticity_confinement', injectImpulse: 'velocity_inject_impulse',
+  injectDisk: 'velocity_inject_disk', noise: 'velocity_noise', render: 'velocity_render',
+  densityAdvect: 'density_advect', gravityPoisson: 'gravity_poisson', gravityForce: 'gravity_force',
+  densityInjectImpulse: 'density_inject_impulse', densityInjectDisk: 'density_inject_disk',
+  densityInjectNoise: 'density_inject_noise',
+};
+
+const logElement = document.getElementById('log');
+const log = line => { logElement.textContent += line + '\n'; };
+
+async function measureRenderMs(device, physics) {
+  const samples = [];
+  for (let sample = 0; sample < RENDER_SAMPLES; sample++) {
+    const start = performance.now();
+    physics.renderToCanvas();
+    await device.queue.onSubmittedWorkDone();
+    samples.push(performance.now() - start);
+  }
+  samples.sort((a, b) => a - b);
+  return samples[Math.floor(samples.length / 2)];
+}
+
+async function main() {
+  const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
+  const device  = await adapter.requestDevice({ requiredFeatures: ['timestamp-query'] });
+  device.addEventListener('uncapturederror', event => log(`GPU error: ${event.error.message}`));
+
+  const shaderSources = {};
+  for (const [key, file] of Object.entries(SHADER_FILES)) {
+    shaderSources[key] = await (await fetch(`../../src/shaders/${file}.wgsl`, { cache: 'reload' })).text();
+  }
+
+  const physics = new WebGPUNavierStokesStep(device, document.getElementById('canvas'), shaderSources);
+  log(navigator.userAgent);
+  log(`grid ${GRID_SIZE}, pressure iterations ${PHYSICS_DEFAULTS.pressureIterations}, vorticity ${PHYSICS_DEFAULTS.vorticityStrength}, boundary ${PHYSICS_DEFAULTS.boundaryMode}`);
+  await profileFieldAStep({ device, physics, steps: PROFILED_STEPS, log });
+  log(`  render to canvas ${(await measureRenderMs(device, physics)).toFixed(3).padStart(8)} ms  (submit → done, wall)`);
+  log('DONE');
+}
+
+main().catch(error => log(`FAILED: ${error.stack ?? error}`));
+</script>
+</body>
+</html>

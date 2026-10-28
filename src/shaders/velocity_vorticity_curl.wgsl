@@ -12,14 +12,15 @@ struct BaseParams {
 @group(0) @binding(1) var curlOut:    texture_storage_2d<r32float, write>;
 @group(0) @binding(2) var<uniform> params: BaseParams;
 
-fn wrapI(c: i32, n: i32) -> i32 {
-  return ((c % n) + n) % n;
+// Integer division is slow on every GPU; callers stay within one period of the grid.
+fn wrapIntoGrid(c: i32, n: i32) -> i32 {
+  return c + select(select(0, -n, c >= n), n, c < 0);
 }
 
 fn sampleVelocity(col: i32, row: i32) -> vec2f {
   let n = i32(params.gridSize);
   if (params.boundaryMode == 0u) {
-    return textureLoad(velocityIn, vec2i(wrapI(col, n), wrapI(row, n)), 0).xy;
+    return textureLoad(velocityIn, vec2i(wrapIntoGrid(col, n), wrapIntoGrid(row, n)), 0).xy;
   }
   return textureLoad(velocityIn, vec2i(clamp(col, 0, n - 1), clamp(row, 0, n - 1)), 0).xy;
 }

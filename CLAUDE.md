@@ -282,7 +282,9 @@ Current patterns:
 
 Three modes, selected via dropdown:
 
-**Wrap (0):** Periodic — fields connect edge to edge via `wrapI()` in all shaders.
+**Wrap (0):** Periodic — fields connect edge to edge via `wrapIntoGrid()` in the velocity
+shaders (a one-period conditional add; integer `%` is slow on GPUs) and `wrapI()` in the
+gravity experiment shaders.
 
 **Absorb (1):** Open boundary — fluid exits freely.
 - Advection: backtracked positions outside domain return `vec2(0)` (no energy smuggled in)
@@ -321,6 +323,12 @@ This reduces the directional bias that causes diagonal artifacts with the 5-poin
 Pressure is warm-started between frames (previous frame's solution as initial guess),
 improving Jacobi convergence without any extra zeroing cost.
 
+Several Jacobi iterations run per dispatch (`PRESSURE_ITERATIONS_PER_DISPATCH = 4`): each
+workgroup iterates a 32×32 tile in workgroup memory and writes only the interior that is
+still exact after k steps ((32 − 2k)² cells). Ghost cells outside the domain are derived per
+iteration with the same Absorb/Reflect rules as before. The result equals k separate
+iterations up to float rounding (a few ulp), with ~4× fewer dispatches and texture reads.
+
 ## Vorticity Confinement
 
 Two-pass process after advection, before pressure projection:
@@ -334,14 +342,18 @@ Skipped entirely when `vorticityStrength == 0` (no GPU cost).
 ## Field A — WebGPU Compute Pipeline
 
 Field A physics runs entirely on WebGPU (`WebGPUNavierStokesStep.js`).
-One encoder per `step()` call, submitted once:
+One encoder and one compute pass per `step()` call, submitted once. WebGPU orders the
+dispatches inside a pass, so the pass needs no splitting, and every extra pass costs GPU
+idle time. Bind groups depend only on the ping-pong state, so they are created once per
+state and cached (`_cachedBindGroup`):
 
 1. **Advect** (`velocity_advect.wgsl`) — semi-Lagrangian bicubic; ping-pong velocity textures.
 2. **Vorticity curl** (`velocity_vorticity_curl.wgsl`) — scalar curl → `r32float` curl texture.
 3. **Vorticity confinement** (`velocity_vorticity_confinement.wgsl`) — adds confinement force;
    skipped if `vorticityStrength == 0`.
 4. **Divergence** (`velocity_divergence.wgsl`) — ∇·v → `r32float` divergence texture.
-5. **Pressure Jacobi** (`velocity_pressure.wgsl`) — N iterations; ping-pong pressure textures.
+5. **Pressure Jacobi** (`velocity_pressure.wgsl`) — N iterations in dispatches of up to 4;
+   ping-pong pressure textures.
 6. **Subtract gradient** (`velocity_subtract_gradient.wgsl`) — v − ∇p; enforce incompressibility.
 
 Inject operations (impulse, disk, noise) each use a separate per-call encoder+submit so

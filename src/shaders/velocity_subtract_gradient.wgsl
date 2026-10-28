@@ -13,14 +13,15 @@ struct BaseParams {
 @group(0) @binding(2) var velocityOut: texture_storage_2d<rg32float, write>;
 @group(0) @binding(3) var<uniform> params: BaseParams;
 
-fn wrapI(c: i32, n: i32) -> i32 {
-  return ((c % n) + n) % n;
+// Integer division is slow on every GPU; callers stay within one period of the grid.
+fn wrapIntoGrid(c: i32, n: i32) -> i32 {
+  return c + select(select(0, -n, c >= n), n, c < 0);
 }
 
 fn samplePressure(col: i32, row: i32) -> f32 {
   let n = i32(params.gridSize);
   if (params.boundaryMode == 0u) {
-    return textureLoad(pressureIn, vec2i(wrapI(col, n), wrapI(row, n)), 0).r;
+    return textureLoad(pressureIn, vec2i(wrapIntoGrid(col, n), wrapIntoGrid(row, n)), 0).r;
   }
   // Absorb: Dirichlet p=0 — consistent with pressure solve ghost-cell treatment.
   if (params.boundaryMode == 1u && (col < 0 || col >= n || row < 0 || row >= n)) {

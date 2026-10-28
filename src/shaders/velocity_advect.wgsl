@@ -13,15 +13,16 @@ struct AdvectParams {
 @group(0) @binding(1) var velocityOut: texture_storage_2d<rg32float, write>;
 @group(0) @binding(2) var<uniform> params: AdvectParams;
 
-fn wrapI(c: i32, n: i32) -> i32 {
-  return ((c % n) + n) % n;
+// Integer division is slow on every GPU; callers stay within one period of the grid.
+fn wrapIntoGrid(c: i32, n: i32) -> i32 {
+  return c + select(select(0, -n, c >= n), n, c < 0);
 }
 
 // Boundary-aware velocity sample at integer cell (col, row).
 fn sampleVelocityAt(col: i32, row: i32) -> vec2f {
   let n = i32(params.gridSize);
   if (params.boundaryMode == 0u) {
-    return textureLoad(velocityIn, vec2i(wrapI(col, n), wrapI(row, n)), 0).xy;
+    return textureLoad(velocityIn, vec2i(wrapIntoGrid(col, n), wrapIntoGrid(row, n)), 0).xy;
   }
   // Absorb: out-of-domain positions contribute zero — no energy smuggled in.
   if (params.boundaryMode == 1u && (col < 0 || col >= n || row < 0 || row >= n)) {
@@ -43,11 +44,20 @@ fn catmullRomWeights(t: f32) -> vec4f {
   );
 }
 
+// A back-traced cell can lie several periods away; folding its integer index once keeps
+// every stencil index within one period of the grid. The index is an integer-valued f32,
+// so the fold is exact, and the fraction is taken from the unfolded position as before.
+fn foldCellIndex(cell: f32) -> i32 {
+  if (params.boundaryMode != 0u) { return i32(cell); }
+  let n = f32(params.gridSize);
+  return i32(cell - n * floor(cell / n));
+}
+
 // Bicubic Catmull-Rom interpolation at fractional cell position (posX, posY).
 // posX and posY are in cell-centre space: posX=0 is the centre of column 0.
 fn sampleVelocityBicubic(posX: f32, posY: f32) -> vec2f {
-  let iX = i32(floor(posX));
-  let iY = i32(floor(posY));
+  let iX = foldCellIndex(floor(posX));
+  let iY = foldCellIndex(floor(posY));
   let wx = catmullRomWeights(fract(posX));
   let wy = catmullRomWeights(fract(posY));
 
