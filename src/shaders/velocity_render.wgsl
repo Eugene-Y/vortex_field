@@ -13,6 +13,8 @@ struct RenderParams {
 @group(0) @binding(1) var<uniform> params:  RenderParams;
 @group(0) @binding(2) var densityTexture:  texture_2d<f32>;
 
+const VELOCITY_SATURATION = 0.72;
+
 struct VertexOut {
   @builtin(position) position: vec4f,
   @location(0)       uv:       vec2f,
@@ -55,7 +57,7 @@ fn mapVelocityToColor(velocity: vec2f) -> vec3f {
   let brightness = magnitude / (magnitude + params.velocityToneMidpoint);
   let angle      = atan2(velocity.y, velocity.x);
   let hue        = (angle + 3.14159265) / (2.0 * 3.14159265);
-  return hsvToRgb(vec3f(hue, 0.8, brightness));
+  return hsvToRgb(vec3f(hue, VELOCITY_SATURATION, brightness));
 }
 
 @fragment
