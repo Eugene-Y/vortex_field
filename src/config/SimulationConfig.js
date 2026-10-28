@@ -5,6 +5,17 @@ const _float = (key, def) => { const v = parseFloat(_p.get(key)); return isFinit
 const _int   = (key, def, min, max) => { const v = parseInt(_p.get(key), 10); return isNaN(v) ? def : Math.max(min, Math.min(max, v)); };
 const _str   = (key, def) => _p.has(key) ? _p.get(key) : def;
 
+const HEX_COLOR_PATTERN = /^[0-9a-f]{6}$/i;
+const COLOR_CHANNEL_MAX = 255;
+
+// Colors are [r, g, b] floats in 0–1 internally and 6-digit hex (no '#') in URLs and color inputs.
+export const rgbToHex = rgb => rgb
+  .map(channel => Math.round(channel * COLOR_CHANNEL_MAX).toString(16).padStart(2, '0'))
+  .join('');
+export const hexToRgb = hex => [0, 2, 4]
+  .map(offset => parseInt(hex.slice(offset, offset + 2), 16) / COLOR_CHANNEL_MAX);
+const _color = (key, def) => { const v = _p.get(key); return v && HEX_COLOR_PATTERN.test(v) ? hexToRgb(v) : def; };
+
 // All tuneable defaults live here. URL params override them on load.
 const DEFAULTS = {
   gridSize:          256,
@@ -143,6 +154,9 @@ export function buildShareUrl() {
     pattern:       PATTERN_DEFAULTS.pattern,
     velBrightness: BRIGHTNESS_SLIDER_POSITIONS.velocity,
     rotBrightness: BRIGHTNESS_SLIDER_POSITIONS.rotation,
+    colorCcw:      rgbToHex(COLORS.rotationPositive),
+    colorCw:       rgbToHex(COLORS.rotationNegative),
+    colorZero:     rgbToHex(COLORS.rotationZero),
   });
   if (GRAVITY_EXPERIMENT) {
     params.set('gravityExperiment', 1);
@@ -161,10 +175,11 @@ export function buildShareUrl() {
   return `${window.location.origin}${window.location.pathname}?${params}`;
 }
 
+// Mutable: the Field B color pickers replace these arrays live.
 export const COLORS = {
-  rotationPositive: [1.0, 0.5, 0.0], // orange — counter-clockwise
-  rotationNegative: [0.0, 0.6, 1.0], // blue  — clockwise
-  rotationZero: [0.0, 0.0, 0.0], // black — no contribution
+  rotationPositive: _color('colorCcw',  [1.0, 0.5, 0.0]), // orange — counter-clockwise
+  rotationNegative: _color('colorCw',   [0.0, 0.6, 1.0]), // blue   — clockwise
+  rotationZero:     _color('colorZero', [0.0, 0.0, 0.0]), // black  — no contribution
 };
 
 // Named physics model identifiers used by PhysicsRegistry.

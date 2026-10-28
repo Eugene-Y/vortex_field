@@ -115,7 +115,7 @@ excuse sloppy code. The following rules apply without exception.
 
 **State**
 - No shared mutable globals. State lives in class instances passed explicitly.
-- Exception: `PHYSICS_DEFAULTS`, `MOUSE_DEFAULTS`, and `ROTATION_FIELD` in
+- Exception: `PHYSICS_DEFAULTS`, `MOUSE_DEFAULTS`, `ROTATION_FIELD`, and `COLORS` in
   `SimulationConfig.js` are intentionally mutable — the UI writes to them and the
   simulation reads them live each frame, so slider changes take effect immediately
   without any extra wiring.
@@ -232,7 +232,9 @@ Current sliders:
   right = liquid (many iters, incompressible), left = gas (few iters, compressible)
 - **Pattern size** (under Field B) — `MOUSE_DEFAULTS.patternScale`
 - **Show contribution** (under Field B) — two toggle buttons CCW / CW; independently
-  enable/disable positive and negative ω contributions via `ROTATION_FIELD.showMask` bit flags
+  enable/disable positive and negative ω contributions via `ROTATION_FIELD.showMask` bit flags;
+  three color swatches on the same row set `COLORS` for CCW, zero and CW (URL: `colorCcw`,
+  `colorCw`, `colorZero` as 6-digit hex). Field B blends from the zero color toward the sign color
 - **Pair distance** (under Field B) — `ROTATION_FIELD.pairDistance` (log, 0.001–1);
   center of the annulus as fraction of gridSize/2
 - **Distance delta** (under Field B) — `ROTATION_FIELD.distanceDelta` (log, 0.001–1);

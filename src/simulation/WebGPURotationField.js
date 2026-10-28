@@ -66,7 +66,7 @@ export class WebGPURotationField {
     });
 
     this._renderParamsBuffer = device.createBuffer({
-      size:  48,
+      size:  64,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -314,18 +314,25 @@ export class WebGPURotationField {
     };
   }
 
+  // Colors are compared by reference: the pickers replace the arrays rather than mutating them.
   _snapshotRenderParams() {
     return {
       toneMidpoint:  RENDER_DEFAULTS.rotationToneMidpoint,
       autoNormalize: ROTATION_FIELD.autoNormalize,
+      colorPositive: COLORS.rotationPositive,
+      colorNegative: COLORS.rotationNegative,
+      colorZero:     COLORS.rotationZero,
     };
   }
 
   _haveRenderParamsChanged() {
     const prev = this._lastRenderParamSnapshot;
     if (!prev) return true;
-    return RENDER_DEFAULTS.rotationToneMidpoint !== prev.toneMidpoint ||
-           ROTATION_FIELD.autoNormalize         !== prev.autoNormalize;
+    return RENDER_DEFAULTS.rotationToneMidpoint !== prev.toneMidpoint  ||
+           ROTATION_FIELD.autoNormalize         !== prev.autoNormalize ||
+           COLORS.rotationPositive              !== prev.colorPositive ||
+           COLORS.rotationNegative              !== prev.colorNegative ||
+           COLORS.rotationZero                  !== prev.colorZero;
   }
 
   _haveComputeParamsChanged() {
@@ -453,7 +460,7 @@ export class WebGPURotationField {
 
   _writeRenderParams() {
     // Field order must match struct RenderParams in rotation_render.wgsl exactly.
-    new UniformWriter(48)
+    new UniformWriter(64)
       .u32(this._gridSize)                       // gridSize
       .f32(RENDER_DEFAULTS.rotationToneMidpoint) // rotationToneMidpoint
       .u32(ROTATION_FIELD.autoNormalize)         // autoNormalize
@@ -465,6 +472,10 @@ export class WebGPURotationField {
       .f32(COLORS.rotationNegative[0])           // colorNegative.r
       .f32(COLORS.rotationNegative[1])           // colorNegative.g
       .f32(COLORS.rotationNegative[2])           // colorNegative.b
+      .pad()                                     // pad (vec3f → vec4f alignment)
+      .f32(COLORS.rotationZero[0])               // colorZero.r
+      .f32(COLORS.rotationZero[1])               // colorZero.g
+      .f32(COLORS.rotationZero[2])               // colorZero.b
       .pad()                                     // pad (vec3f → vec4f alignment)
       .writeBuffer(this._device, this._renderParamsBuffer);
   }

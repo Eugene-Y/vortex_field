@@ -188,6 +188,36 @@
       display: contents;
     }
 
+    .color-swatch {
+      width: 16px;
+      height: 16px;
+      margin: 1px 0;
+      padding: 0;
+      border: 1px solid #2a2a2a;
+      background: none;
+      cursor: pointer;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+
+    .color-swatch:hover,
+    .color-swatch:focus-visible {
+      border-color: #888;
+      outline: none;
+    }
+
+    .color-swatch::-webkit-color-swatch-wrapper {
+      padding: 0;
+    }
+
+    .color-swatch::-webkit-color-swatch {
+      border: none;
+    }
+
+    .color-swatch::-moz-color-swatch {
+      border: none;
+    }
+
     .pattern-select {
       flex: 1;
       min-width: 0;

@@ -1,6 +1,6 @@
 // WebGPU render pipeline for Field B (rotation field).
-// Reads from the f32 rotation output buffer, applies same color encoding
-// as render.frag rotation mode: orange=CCW, blue=CW, Reinhard tonemapping.
+// Reads from the f32 rotation output buffer; Reinhard-tonemapped magnitude blends
+// from the zero color toward the CCW (positive) or CW (negative) color.
 //
 // Values are normalized by the smoothed mean absolute energy before tone-mapping
 // so the brightness slider remains consistent regardless of pair distance / delta.
@@ -12,7 +12,8 @@ struct RenderParams {
   _pad1:                f32,   // 12
   colorPositive:        vec3f, // 16  CCW — orange by default
   colorNegative:        vec3f, // 32  CW  — blue  by default
-}                               // 48 bytes
+  colorZero:            vec3f, // 48  no rotation — black by default
+}                               // 64 bytes
 
 @group(0) @binding(0) var<storage, read> rotationOutput: array<f32>;
 @group(0) @binding(1) var<uniform>       params:         RenderParams;
@@ -40,11 +41,8 @@ fn mapRotationToColor(rotation: f32, meanAbsValue: f32) -> vec3f {
   let normalized = rotation / max(meanAbsValue, 1e-8);
   let absolute   = abs(normalized);
   let magnitude  = absolute / (absolute + params.rotationToneMidpoint);
-  if (rotation > 0.0) {
-    return params.colorPositive * magnitude;
-  } else {
-    return params.colorNegative * magnitude;
-  }
+  let signColor  = select(params.colorNegative, params.colorPositive, rotation > 0.0);
+  return mix(params.colorZero, signColor, magnitude);
 }
 
 @fragment

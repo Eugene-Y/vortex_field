@@ -1,6 +1,6 @@
 'use strict';
 
-import { RENDER_DEFAULTS, BRIGHTNESS_SLIDER_POSITIONS, PHYSICS_DEFAULTS, MOUSE_DEFAULTS, ROTATION_FIELD, VEL_LOG_RANGE, ROT_DIM_LOG_RANGE, ROT_BRIGHT_LOG_RANGE, DENS_LOG_RANGE, GRAVITY, GRAVITY_EXPERIMENT, BRUSH } from '../config/SimulationConfig.js';
+import { RENDER_DEFAULTS, BRIGHTNESS_SLIDER_POSITIONS, PHYSICS_DEFAULTS, MOUSE_DEFAULTS, ROTATION_FIELD, VEL_LOG_RANGE, ROT_DIM_LOG_RANGE, ROT_BRIGHT_LOG_RANGE, DENS_LOG_RANGE, GRAVITY, GRAVITY_EXPERIMENT, BRUSH, COLORS, rgbToHex, hexToRgb } from '../config/SimulationConfig.js';
 
 const VEL_TONE_BASE  = 30.0;
 const ROT_TONE_BASE  = 1.0;
@@ -31,7 +31,10 @@ const CONTROL_HINTS = {
   gravityIterations:  'Solver iterations for the gravitational potential per step: more is more accurate but slower.',
   massDamping:        'Share of mass kept per second: below 1, injected mass slowly fades.',
   patternSize:        'Size of the pattern injected by double-clicking Field B, as a fraction of the field.',
-  showContribution:   'Which rotation directions Field B accumulates: CCW (orange), CW (blue), or both.',
+  showContribution:   'Which rotation directions Field B accumulates: CCW, CW, or both.',
+  colorCcw:           'Color of counter-clockwise rotation in Field B.',
+  colorCw:            'Color of clockwise rotation in Field B.',
+  colorZero:          'Field B color where there is no rotation; stronger rotation blends from it toward the CCW / CW color.',
   pairDistance:       'Distance between paired cells, as a fraction of half the grid: small values show local swirls, large ones large-scale rotation.',
   distanceDelta:      'Spread around the pair distance. Wider includes more pairs: smoother image, more GPU work.',
   sampleStride:       'Use every N-th cell in each axis for Field B: N² less work, brightness is compensated.',
@@ -400,7 +403,39 @@ export class ControlPanel {
     group.appendChild(makeBit(1, 'CCW'));
     group.appendChild(makeBit(2, 'CW'));
     wrapper.appendChild(group);
+
+    const swatches = document.createElement('div');
+    swatches.style.cssText = 'display:flex;gap:4px;margin-left:6px';
+    swatches.appendChild(this._createColorPicker('CCW color',
+      () => COLORS.rotationPositive,
+      rgb => { COLORS.rotationPositive = rgb; },
+      CONTROL_HINTS.colorCcw
+    ));
+    swatches.appendChild(this._createColorPicker('Zero color',
+      () => COLORS.rotationZero,
+      rgb => { COLORS.rotationZero = rgb; },
+      CONTROL_HINTS.colorZero
+    ));
+    swatches.appendChild(this._createColorPicker('CW color',
+      () => COLORS.rotationNegative,
+      rgb => { COLORS.rotationNegative = rgb; },
+      CONTROL_HINTS.colorCw
+    ));
+    wrapper.appendChild(swatches);
+
     container.appendChild(wrapper);
+  }
+
+  // getColor/setColor work in [r, g, b] 0–1 floats. setColor receives a new array on every change.
+  _createColorPicker(label, getColor, setColor, hint) {
+    const picker = document.createElement('input');
+    picker.type = 'color';
+    picker.className = 'color-swatch';
+    picker.value = `#${rgbToHex(getColor())}`;
+    picker.setAttribute('aria-label', label);
+    this._setHint(picker, hint);
+    picker.addEventListener('input', () => setColor(hexToRgb(picker.value.slice(1))));
+    return picker;
   }
 
   _createToggleButton(text) {
