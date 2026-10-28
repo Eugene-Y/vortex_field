@@ -2,7 +2,7 @@
 
 ## Concept
 
-Two coupled fields on a configurable grid (default 256×256, set via `GRID_SIZE`).
+Two coupled fields on a configurable grid (default 512×512, set via `GRID_SIZE`).
 
 **Field A — Velocity field.**
 A 2D fluid simulation (Navier-Stokes) on a grid. The user interacts with the mouse,
@@ -154,7 +154,7 @@ Every tuneable value lives in `src/config/SimulationConfig.js` as a named export
 No magic numbers anywhere else in the codebase. Current structure:
 
 ```js
-export const GRID_SIZE = 256;
+export const GRID_SIZE = 512;
 
 export const DISPLAY_SCALE = 7;  // pixels per grid cell (max; clamped to fit screen)
 export const DISPLAY_GAP = 32;   // pixel gap between the two fields

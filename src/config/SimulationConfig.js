@@ -18,7 +18,7 @@ const _color = (key, def) => { const v = _p.get(key); return v && HEX_COLOR_PATT
 
 // All tuneable defaults live here. URL params override them on load.
 const DEFAULTS = {
-  gridSize:          256,
+  gridSize:          512,
   dampingLoss:       1e-7, // = 1 - damping; stored as loss for URL precision
   simSpeed:          1.0,
   brushRadius:       2.0,
