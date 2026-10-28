@@ -1,23 +1,24 @@
 // Compute shader: instantaneous rotation center field accumulation.
 //
-// Each thread handles one cell i and iterates over all j-neighbors listed in
-// annulusOffsets (precomputed CPU-side annulus ring, unique pairs only via indexB > indexA).
+// Each thread owns one cell A and walks the annulus as runs of consecutive dCol sharing a
+// dRow (half-plane only, so every unordered pair is visited once). For every pair the
+// intersection of the two velocity normals receives the pair's mean angular velocity.
 //
-// When useMask=1, threads cover only the bounding box of a focus circle
-// (maskBoxSize² threads instead of gridSize²) and both cells must be
-// within the circle. This gives O(R²) dispatch vs O(N²) for a circle
-// of radius R, without any dead work beyond the mask-rejection check.
+// Sums are 64-bit fixed point split over two u32 atomics. Field B is built to light up
+// vortex cores, so many pairs hit the same cell: a CAS float loop retries serially there,
+// a native atomicAdd does not, and integer sums are exact and independent of order.
+// A per-workgroup cache of target cells absorbs those hot spots before they reach storage.
 //
-// Accumulation uses a CAS-based f32 atomic add (bit-cast through i32).
-// K private buffers (selected by workgroup_id % K) reduce CAS contention K-fold.
+// When useMask=1, threads cover only the bounding box of the focus circle and the span
+// table is split over dispatch y, since a small box alone cannot occupy the GPU.
 
 struct Params {
   gridSize:          u32,   // 0
   accumulationScale: f32,   // 4
   parallelThreshold: f32,   // 8
-  offsetCount:       u32,   // 12  entries in annulusOffsets
+  spanCount:         u32,   // 12  entries in annulusSpans
   minRadius:         f32,   // 16  annulus inner radius (grid cells) — for mask early-exit
-  maxRadius:         f32,   // 20  annulus outer radius (grid cells) — for mask diameter clamp
+  _pad0:             u32,   // 20
   sampleStride:      u32,   // 24
   maskOriginX:       u32,   // 28
   maskOriginY:       u32,   // 32
@@ -30,73 +31,60 @@ struct Params {
   showMask:          u32,   // 60  bit0=show CCW(positive) bit1=show CW(negative); default=3
 }                            // 64 bytes
 
+struct PairContribution {
+  valid:       bool,
+  targetIndex: u32,
+  value:       f32,
+}
+
+struct CellA {
+  col:    i32,
+  row:    i32,
+  inGrid: bool,
+}
+
 @group(0) @binding(0) var velocityTexture: texture_2d<f32>;
-@group(0) @binding(1) var<storage, read_write> rotationBuffer: array<atomic<i32>>;
+// Interleaved [low word, high word] per cell of a two's-complement 64-bit fixed-point sum.
+@group(0) @binding(1) var<storage, read_write> accumulation: array<atomic<u32>>;
 @group(0) @binding(2) var<uniform> params: Params;
-// Flat i32 array: [dCol0, dRow0, dCol1, dRow1, ...] — precomputed annulus offsets.
-@group(0) @binding(3) var<storage, read> annulusOffsets: array<i32>;
+// [dRow, dColStart, dColEnd, unused] — precomputed half-plane annulus runs, dColEnd inclusive.
+@group(0) @binding(3) var<storage, read> annulusSpans: array<vec4<i32>>;
 
-// CAS-based f32 atomic add — no quantization error.
-// Stores f32 bit-pattern in an atomic<i32>; clearBuffer(0) initialises to 0.0 correctly.
-fn atomicAddF32(idx: u32, value: f32) {
-  var expected = atomicLoad(&rotationBuffer[idx]);
-  loop {
-    let desired = bitcast<i32>(bitcast<f32>(expected) + value);
-    let result  = atomicCompareExchangeWeak(&rotationBuffer[idx], expected, desired);
-    if (result.exchanged) { break; }
-    expected = result.old_value;
-  }
+override FIXED_POINT_SCALE: f32;
+
+const WORKGROUP_SIZE = 64u;
+const TILE_WIDTH     = 8u;
+const BOUNDARY_WRAP  = 0u;
+
+const MIN_SPEED_SQUARED      = 1e-12;
+const MIN_ARM_LENGTH_SQUARED = 0.01;
+
+const TWO_POW_31    = 2147483648.0;
+const TWO_POW_32    = 4294967296.0;
+const FIXED64_LIMIT = 4.6e18;
+
+const CACHE_SLOTS      = 256u;
+const CACHE_HASH_SHIFT = 24u;  // 32 − log2(CACHE_SLOTS): keeps the top bits of the hash
+const FIBONACCI_HASH   = 2654435761u;
+const EMPTY_SLOT       = 0xFFFFFFFFu;
+
+const NO_CONTRIBUTION = PairContribution(false, 0u, 0.0);
+
+var<workgroup> cacheTargets: array<atomic<u32>, CACHE_SLOTS>;
+var<workgroup> cacheLow:     array<atomic<u32>, CACHE_SLOTS>;
+var<workgroup> cacheHigh:    array<atomic<u32>, CACHE_SLOTS>;
+
+fn crossProduct(a: vec2f, b: vec2f) -> f32 {
+  return a.x * b.y - a.y * b.x;
 }
 
-fn periodicDisplacement(posA: vec2f, posB: vec2f, gridSize: f32) -> vec2f {
-  var delta = posB - posA;
-  delta -= gridSize * floor((delta + 0.5 * gridSize) / gridSize);
-  return delta;
+// Integer division is slow on every GPU; the operand is within one period of the range.
+fn wrapIntoGrid(index: i32, gridSize: i32) -> i32 {
+  return index + select(select(0, -gridSize, index >= gridSize), gridSize, index < 0);
 }
 
-// Like periodicDisplacement but respects boundaryMode:
-// in Wrap mode (0) uses shortest torus path; otherwise direct vector.
-fn pairDisplacement(posA: vec2f, posB: vec2f, gridSize: f32) -> vec2f {
-  if (params.boundaryMode == 0u) {
-    return periodicDisplacement(posA, posB, gridSize);
-  }
-  return posB - posA;
-}
-
-fn computeInstantaneousRotationCenter(
-  posA: vec2f, velA: vec2f,
-  posB: vec2f, velB: vec2f,
-  gridSize: f32,
-) -> vec2f {
-  let invalid = vec2f(1e38, 1e38);
-
-  let lenA = length(velA);
-  let lenB = length(velB);
-  if (lenA < 1e-6 || lenB < 1e-6) { return invalid; }
-
-  let normalA = vec2f(-velA.y, velA.x);
-  let normalB = vec2f(-velB.y, velB.x);
-
-  let denominator = normalA.x * normalB.y - normalA.y * normalB.x;
-  if (abs(denominator) / (lenA * lenB) < params.parallelThreshold) { return invalid; }
-
-  let delta = pairDisplacement(posA, posB, gridSize);
-  let t     = (delta.x * normalB.y - delta.y * normalB.x) / denominator;
-  let rawCenter = posA + t * normalA;
-
-  // In Wrap mode fold center back into [0, gridSize); caller discards out-of-domain otherwise.
-  if (params.boundaryMode == 0u) {
-    return rawCenter - gridSize * floor(rawCenter / gridSize);
-  }
-  return rawCenter;
-}
-
-fn computeAngularVelocity(velA: vec2f, center: vec2f, posA: vec2f, gridSize: f32) -> f32 {
-  let arm             = pairDisplacement(center, posA, gridSize);
-  let armLengthSquared = dot(arm, arm);
-  if (armLengthSquared < 0.01) { return 0.0; }
-  let cross = arm.x * velA.y - arm.y * velA.x;
-  return cross / armLengthSquared;
+fn nearestTorusImage(vector: vec2f, gridSize: f32) -> vec2f {
+  return vector - gridSize * floor((vector + 0.5 * gridSize) / gridSize);
 }
 
 fn insideMaskCircle(col: i32, row: i32) -> bool {
@@ -105,99 +93,211 @@ fn insideMaskCircle(col: i32, row: i32) -> bool {
   return dc * dc + dr * dr <= params.maskRadiusSq;
 }
 
-@compute @workgroup_size(64)
-fn computeRotation(
-  @builtin(global_invocation_id) globalId:    vec3<u32>,
-  @builtin(workgroup_id)         workgroupId: vec3<u32>,
-) {
-  let totalCells = params.gridSize * params.gridSize;
+fn passesSignFilter(value: f32) -> bool {
+  if ((params.showMask & 1u) == 0u && value > 0.0) { return false; }
+  if ((params.showMask & 2u) == 0u && value < 0.0) { return false; }
+  return true;
+}
 
-  var colA: i32;
-  var rowA: i32;
+// Folding a center into [0, gridSize) can round up to exactly gridSize; that is cell 0.
+fn targetIndexOfCenter(center: vec2f) -> u32 {
+  let centerCol = u32(center.x);
+  let centerRow = u32(center.y);
+  return select(centerRow, 0u, centerRow >= params.gridSize) * params.gridSize
+       + select(centerCol, 0u, centerCol >= params.gridSize);
+}
 
-  if (params.useMask == 1u) {
-    // Threads cover the mask bounding box only: O(R²) instead of O(N²).
-    let boxSize = params.maskBoxSize;
-    let flatIdx = globalId.x;
-    if (flatIdx >= boxSize * boxSize) { return; }
-    colA = i32(params.maskOriginX) + i32(flatIdx % boxSize);
-    rowA = i32(params.maskOriginY) + i32(flatIdx / boxSize);
-    if (!insideMaskCircle(colA, rowA)) { return; }
+fn angularVelocityAboutArm(arm: vec2f, velocity: vec2f) -> f32 {
+  return crossProduct(arm, velocity) / dot(arm, arm);
+}
+
+// The center lies on both normals: c = posA + t·perp(velA) = posB + s·perp(velB).
+// By Cramer's rule every cross product with a perpendicular collapses to a dot:
+//   t = dot(δ, velB) / cross(velA, velB),   s = dot(δ, velA) / cross(velA, velB),
+// and the arms from c to the cells are −t·perp(velA) and −s·perp(velB).
+// In Wrap mode ω is measured from the folded center to the nearest torus image of each
+// cell, so the arms are folded as well.
+fn evaluatePair(posA: vec2f, velA: vec2f, offset: vec2i, velB: vec2f) -> PairContribution {
+  let speedSquaredA = dot(velA, velA);
+  let speedSquaredB = dot(velB, velB);
+  if (speedSquaredB < MIN_SPEED_SQUARED) { return NO_CONTRIBUTION; }
+
+  let velocityCross = crossProduct(velA, velB);
+  let threshold     = params.parallelThreshold;
+  if (velocityCross * velocityCross < threshold * threshold * speedSquaredA * speedSquaredB) {
+    return NO_CONTRIBUTION;
+  }
+
+  let delta      = vec2f(offset);
+  let parameterA = dot(delta, velB) / velocityCross;
+  let parameterB = dot(delta, velA) / velocityCross;
+
+  let gridSize = f32(params.gridSize);
+  var center   = posA + parameterA * vec2f(-velA.y, velA.x);
+  var armA     = parameterA * vec2f(velA.y, -velA.x);
+  var armB     = parameterB * vec2f(velB.y, -velB.x);
+  if (params.boundaryMode == BOUNDARY_WRAP) {
+    center -= gridSize * floor(center / gridSize);
+    armA    = nearestTorusImage(armA, gridSize);
+    armB    = nearestTorusImage(armB, gridSize);
+  } else if (center.x < 0.0 || center.x >= gridSize || center.y < 0.0 || center.y >= gridSize) {
+    return NO_CONTRIBUTION;
+  }
+
+  if (dot(armB, armB) < MIN_ARM_LENGTH_SQUARED) { return NO_CONTRIBUTION; }
+  let omegaA = select(angularVelocityAboutArm(armA, velA), 0.0, dot(armA, armA) < MIN_ARM_LENGTH_SQUARED);
+  let omegaB = angularVelocityAboutArm(armB, velB);
+  let value  = (omegaA + omegaB) * 0.5 * params.accumulationScale / (gridSize * gridSize);
+  if (!passesSignFilter(value)) { return NO_CONTRIBUTION; }
+  return PairContribution(true, targetIndexOfCenter(center), value);
+}
+
+// Returns (low word, high word) of round(value · FIXED_POINT_SCALE) in two's complement.
+fn toFixed64(value: f32) -> vec2u {
+  let scaled = clamp(round(value * FIXED_POINT_SCALE), -FIXED64_LIMIT, FIXED64_LIMIT);
+  if (abs(scaled) < TWO_POW_31) {
+    let narrow = i32(scaled);
+    return vec2u(bitcast<u32>(narrow), bitcast<u32>(narrow >> 31u));
+  }
+  let highPart = floor(scaled / TWO_POW_32);
+  return vec2u(u32(scaled - highPart * TWO_POW_32), bitcast<u32>(i32(highPart)));
+}
+
+// The previous low word returned by the atomic tells this invocation whether its own add
+// carried; addition commutes, so the high word converges to the exact sum in any order.
+// Small values of either sign leave the high increment at zero (−1 + carry), so most adds
+// touch one word.
+fn addFixed64ToStorage(cellIndex: u32, words: vec2u) {
+  let previousLow   = atomicAdd(&accumulation[2u * cellIndex], words.x);
+  let carry         = select(0u, 1u, previousLow + words.x < previousLow);
+  let highIncrement = words.y + carry;
+  if (highIncrement != 0u) { atomicAdd(&accumulation[2u * cellIndex + 1u], highIncrement); }
+}
+
+fn addFixed64ToCache(slot: u32, words: vec2u) {
+  let previousLow   = atomicAdd(&cacheLow[slot], words.x);
+  let carry         = select(0u, 1u, previousLow + words.x < previousLow);
+  let highIncrement = words.y + carry;
+  if (highIncrement != 0u) { atomicAdd(&cacheHigh[slot], highIncrement); }
+}
+
+// Direct-mapped: the first target hashed to a slot owns it for the rest of the workgroup;
+// colliding targets go straight to storage.
+fn claimsCacheSlot(slot: u32, targetCell: u32) -> bool {
+  let occupant = atomicLoad(&cacheTargets[slot]);
+  if (occupant == targetCell) { return true; }
+  if (occupant != EMPTY_SLOT) { return false; }
+  let claim = atomicCompareExchangeWeak(&cacheTargets[slot], EMPTY_SLOT, targetCell);
+  return claim.exchanged || claim.old_value == targetCell;
+}
+
+fn submitContribution(contribution: PairContribution) {
+  if (!contribution.valid) { return; }
+  let words = toFixed64(contribution.value);
+  let slot  = (contribution.targetIndex * FIBONACCI_HASH) >> CACHE_HASH_SHIFT;
+  if (claimsCacheSlot(slot, contribution.targetIndex)) {
+    addFixed64ToCache(slot, words);
   } else {
-    let indexA = globalId.x;
-    if (indexA >= totalCells) { return; }
-    colA = i32(indexA % params.gridSize);
-    rowA = i32(indexA / params.gridSize);
-  }
-
-  let indexA = u32(rowA) * params.gridSize + u32(colA);
-  let gSize  = f32(params.gridSize);
-  let posA   = vec2f(f32(colA), f32(rowA));
-  let velA   = textureLoad(velocityTexture, vec2i(colA, rowA), 0).xy;
-  if (length(velA) < 1e-6) { return; }
-  if (colA % i32(params.sampleStride) != 0 || rowA % i32(params.sampleStride) != 0) { return; }
-
-  // When mask is active, bail early if the annulus inner radius exceeds the mask diameter —
-  // no pair within the mask circle can satisfy the minimum distance constraint.
-  if (params.useMask == 1u) {
-    let maskDiameter = 2.0 * sqrt(params.maskRadiusSq);
-    if (params.minRadius > maskDiameter) { return; }
-  }
-
-  let bufferOffset = (workgroupId.x % ACCUMULATION_BUFFERS) * totalCells;
-
-  // Iterate precomputed annulus offsets — no per-pair distance check needed.
-  for (var k = 0u; k < params.offsetCount; k++) {
-    let dCol = annulusOffsets[k * 2u];
-    let dRow = annulusOffsets[k * 2u + 1u];
-
-    var colB: i32;
-    var rowB: i32;
-    if (params.boundaryMode == 0u) {
-      colB = ((colA + dCol) % i32(params.gridSize) + i32(params.gridSize)) % i32(params.gridSize);
-      rowB = ((rowA + dRow) % i32(params.gridSize) + i32(params.gridSize)) % i32(params.gridSize);
-    } else {
-      colB = colA + dCol;
-      rowB = rowA + dRow;
-      if (colB < 0 || colB >= i32(params.gridSize) ||
-          rowB < 0 || rowB >= i32(params.gridSize)) { continue; }
-    }
-    let indexB = u32(rowB) * params.gridSize + u32(colB);
-
-    if (indexB <= indexA) { continue; }
-
-    // When mask is active, discard pairs where cell B is outside the circle.
-    if (params.useMask == 1u && !insideMaskCircle(colB, rowB)) { continue; }
-
-    let posB = vec2f(f32(colB), f32(rowB));
-    let velB = textureLoad(velocityTexture, vec2i(colB, rowB), 0).xy;
-
-    let center = computeInstantaneousRotationCenter(posA, velA, posB, velB, gSize);
-    if (center.x > 1e37) { continue; }
-
-    // In non-Wrap modes discard centers that fall outside the domain.
-    if (params.boundaryMode != 0u &&
-        (center.x < 0.0 || center.x >= gSize ||
-         center.y < 0.0 || center.y >= gSize)) { continue; }
-
-    let armB = pairDisplacement(center, posB, gSize);
-    if (dot(armB, armB) < 0.01) { continue; }
-
-    // Average ω from both cells — removes asymmetry from indexA<indexB selection.
-    let omegaA = computeAngularVelocity(velA, center, posA, gSize);
-    let omegaB = computeAngularVelocity(velB, center, posB, gSize);
-    let contribution = (omegaA + omegaB) * 0.5 * params.accumulationScale / f32(totalCells);
-
-    // showMask bit0=CCW(positive) bit1=CW(negative). Skip contribution if its sign is hidden.
-    if ((params.showMask & 1u) == 0u && contribution > 0.0) { continue; }
-    if ((params.showMask & 2u) == 0u && contribution < 0.0) { continue; }
-
-    let centerCol   = i32(center.x) % i32(params.gridSize);
-    let centerRow   = i32(center.y) % i32(params.gridSize);
-    let targetIndex = u32(centerRow) * params.gridSize + u32(centerCol);
-
-    atomicAddF32(bufferOffset + targetIndex, contribution);
+    addFixed64ToStorage(contribution.targetIndex, words);
   }
 }
 
-override ACCUMULATION_BUFFERS: u32 = 16u;
+fn resetCache(localIndex: u32) {
+  for (var slot = localIndex; slot < CACHE_SLOTS; slot += WORKGROUP_SIZE) {
+    atomicStore(&cacheTargets[slot], EMPTY_SLOT);
+    atomicStore(&cacheLow[slot], 0u);
+    atomicStore(&cacheHigh[slot], 0u);
+  }
+}
+
+fn flushCache(localIndex: u32) {
+  for (var slot = localIndex; slot < CACHE_SLOTS; slot += WORKGROUP_SIZE) {
+    let targetCell = atomicLoad(&cacheTargets[slot]);
+    if (targetCell == EMPTY_SLOT) { continue; }
+    addFixed64ToStorage(targetCell, vec2u(atomicLoad(&cacheLow[slot]), atomicLoad(&cacheHigh[slot])));
+  }
+}
+
+// Without a mask each workgroup covers an 8×8 tile, so one span step of the workgroup
+// lands on a compact patch of B cells and, in smooth flow, of target cells.
+fn resolveCellA(globalId: vec3u, workgroupId: vec3u, localIndex: u32) -> CellA {
+  if (params.useMask == 1u) {
+    let boxSize = params.maskBoxSize;
+    let col = i32(params.maskOriginX + globalId.x % boxSize);
+    let row = i32(params.maskOriginY + globalId.x / boxSize);
+    return CellA(col, row, globalId.x < boxSize * boxSize && insideMaskCircle(col, row));
+  }
+  let tilesPerRow = (params.gridSize + TILE_WIDTH - 1u) / TILE_WIDTH;
+  let col = i32((workgroupId.x % tilesPerRow) * TILE_WIDTH + localIndex % TILE_WIDTH);
+  let row = i32((workgroupId.x / tilesPerRow) * TILE_WIDTH + localIndex / TILE_WIDTH);
+  return CellA(col, row, col < i32(params.gridSize) && row < i32(params.gridSize));
+}
+
+fn isSampledCell(cell: CellA) -> bool {
+  let stride = i32(params.sampleStride);
+  return cell.col % stride == 0 && cell.row % stride == 0;
+}
+
+// No pair inside the mask circle can reach the annulus inner radius.
+fn annulusReachableInsideMask() -> bool {
+  return params.useMask == 0u || params.minRadius <= 2.0 * sqrt(params.maskRadiusSq);
+}
+
+// Outside Wrap mode the span is clipped to the domain once instead of per pair.
+fn accumulateSpan(cell: CellA, velA: vec2f, span: vec4<i32>) {
+  let gridSize  = i32(params.gridSize);
+  let dRow      = span.x;
+  var dColStart = span.y;
+  var dColEnd   = span.z;
+  var rowB      = cell.row + dRow;
+  if (params.boundaryMode == BOUNDARY_WRAP) {
+    rowB = wrapIntoGrid(rowB, gridSize);
+  } else {
+    if (rowB < 0 || rowB >= gridSize) { return; }
+    dColStart = max(dColStart, -cell.col);
+    dColEnd   = min(dColEnd, gridSize - 1 - cell.col);
+  }
+
+  let posA = vec2f(f32(cell.col), f32(cell.row));
+  var colB = wrapIntoGrid(cell.col + dColStart, gridSize);
+  for (var dCol = dColStart; dCol <= dColEnd; dCol++) {
+    if (params.useMask == 0u || insideMaskCircle(colB, rowB)) {
+      let velB = textureLoad(velocityTexture, vec2i(colB, rowB), 0).xy;
+      submitContribution(evaluatePair(posA, velA, vec2i(dCol, dRow), velB));
+    }
+    colB += 1;
+    if (colB == gridSize) { colB = 0; }
+  }
+}
+
+fn accumulateSpanChunk(cell: CellA, velA: vec2f, chunkIndex: u32, chunkCount: u32) {
+  let chunkLength = (params.spanCount + chunkCount - 1u) / chunkCount;
+  let firstSpan   = chunkIndex * chunkLength;
+  let endSpan     = min(params.spanCount, firstSpan + chunkLength);
+  for (var spanIndex = firstSpan; spanIndex < endSpan; spanIndex++) {
+    accumulateSpan(cell, velA, annulusSpans[spanIndex]);
+  }
+}
+
+// Barriers need every invocation of the workgroup, so idle cells skip the work
+// instead of returning early.
+@compute @workgroup_size(WORKGROUP_SIZE)
+fn computeRotation(
+  @builtin(global_invocation_id)   globalId:      vec3<u32>,
+  @builtin(workgroup_id)           workgroupId:   vec3<u32>,
+  @builtin(num_workgroups)         workgroupGrid: vec3<u32>,
+  @builtin(local_invocation_index) localIndex:    u32,
+) {
+  resetCache(localIndex);
+  workgroupBarrier();
+
+  let cell = resolveCellA(globalId, workgroupId, localIndex);
+  var velA = vec2f(0.0);
+  if (cell.inGrid) { velA = textureLoad(velocityTexture, vec2i(cell.col, cell.row), 0).xy; }
+  let contributes = cell.inGrid && dot(velA, velA) >= MIN_SPEED_SQUARED
+    && isSampledCell(cell) && annulusReachableInsideMask();
+  if (contributes) { accumulateSpanChunk(cell, velA, workgroupId.y, workgroupGrid.y); }
+
+  workgroupBarrier();
+  flushCache(localIndex);
+}

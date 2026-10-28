@@ -28,6 +28,7 @@ const variant = (name, options) => ({
 
 export const VARIANTS = {
   production:              PRODUCTION_VARIANT,
+  branch:                  variant('branch src shader', { branchShader: true, offsetTable: 'rowSpans', accumulation: 'fixed64', accumulationBuffers: 1, cellOrder: 'tiled8', maskOffsetSplit: 16 }),
   generatedReference:      variant('generated reference', {}),
   halfPlane:               variant('halfPlane', { offsetTable: 'halfPlane' }),
   inverseT:                variant('inverseT', { pairMath: 'inverseT' }),

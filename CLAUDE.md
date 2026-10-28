@@ -18,9 +18,9 @@ signed magnitude of that relative rotation is accumulated into the cell of Field
 whose grid coordinate corresponds to that center of rotation. Sign encodes direction
 (clockwise vs counter-clockwise). Magnitude encodes strength.
 
-The GPU kernel evaluates only unique pairs (`indexA < indexB`) to avoid double-counting.
-Angular velocity ω is computed from both cells independently and averaged, removing
-any asymmetry introduced by the indexA < indexB selection. The interaction radius is controlled by `pairDistance` (annulus center) and
+The GPU kernel evaluates only unique pairs (offsets in one half plane) to avoid
+double-counting. Angular velocity ω is computed from both cells independently and
+averaged, removing any asymmetry introduced by which cell of the pair is visited. The interaction radius is controlled by `pairDistance` (annulus center) and
 `distanceDelta` (annulus half-width), selecting pairs within
 `[pairDistance − distanceDelta, pairDistance + distanceDelta] × gridSize/2` cells.
 
@@ -75,8 +75,8 @@ src/
     velocity_vorticity_confinement.wgsl — applies confinement force to re-energise vortices
     velocity_noise.wgsl               — per-cell pseudo-random velocity
     velocity_render.wgsl              — render pipeline: Reinhard tonemapping + HSV encoding
-    rotation_compute.wgsl             — WGSL compute: accumulates ω into K atomic i32 buffers
-    rotation_reduce.wgsl              — WGSL compute: sums K buffers → flat f32 output buffer
+    rotation_compute.wgsl             — WGSL compute: accumulates ω into 64-bit fixed-point sums
+    rotation_reduce.wgsl              — WGSL compute: fixed-point sums → flat f32 output buffer
     rotation_render.wgsl              — WGSL render: output buffer → canvas (orange/blue tones)
 ```
 
@@ -361,23 +361,30 @@ Field B rotation accumulation runs entirely on WebGPU (`WebGPURotationField.js`)
 Reads velocity directly from the GPUTexture exposed by `FluidField.velocityTexture` —
 no CPU round-trip. The pipeline has three passes per frame in one encoder:
 
-1. **Compute pass** (`rotation_compute.wgsl`) — N² threads (one per cell i), each
-   iterates the precomputed annulus offset table (flat i32 buffer of `[dCol, dRow]` pairs,
-   built CPU-side when `pairDistance`/`distanceDelta` change, uploaded once). No per-pair
-   distance check in the shader — every entry is guaranteed to lie in the annulus. For each
-   valid pair the instantaneous rotation center is computed and ω averaged from both
-   cells is accumulated into one of K=16 atomic i32 accumulation buffers selected by
-   `workgroupId % K`, reducing CAS contention K-fold. Accumulation uses a CAS-based
-   f32 atomic add (bit-cast through i32; `clearBuffer(0)` initialises correctly since
-   0x00000000 is 0.0 in IEEE 754). `showMask` bit flags filter contributions by sign
-   (bit0=CCW/positive, bit1=CW/negative) before accumulation.
+1. **Compute pass** (`rotation_compute.wgsl`) — one thread per cell A, workgroups of
+   8×8 cells. Each thread walks the precomputed annulus span table (`[dRow, dColStart,
+   dColEnd]` runs over the half plane `dRow > 0 || (dRow == 0 && dCol > 0)`, built CPU-side
+   when `pairDistance`/`distanceDelta` change), so every unordered pair is visited once
+   and no distance check or duplicate test runs per pair. For each valid pair the rotation
+   center and ω averaged from both cells use the closed form
+   `t = dot(δ, v_B) / cross(v_A, v_B)`, `ω = 1/t` (arms folded to the nearest torus image
+   in Wrap mode, as the definition requires).
+
+   Sums are 64-bit fixed point (`FIXED_POINT_SCALE = 2³²`) in two u32 atomics per cell,
+   carry taken from the returned low word. Field B concentrates pairs on vortex cores by
+   design; a CAS float loop retries serially there, native `atomicAdd` does not, and
+   integer sums are exact and order-independent. A direct-mapped cache of 256 target
+   cells in workgroup memory absorbs those hot spots and is flushed once per workgroup.
+   Wraps use a conditional add instead of integer `%`. `showMask` bit flags filter
+   contributions by sign (bit0=CCW/positive, bit1=CW/negative) before accumulation.
 
    When the focus mask is active, threads cover only the bounding box of the circle
-   (O(R²) instead of O(N²)), and pairs where cell B or the center is outside the
+   (O(R²) instead of O(N²)) and the span table is split over 16 workgroup rows so the
+   small box still occupies the GPU; pairs where cell B or the center is outside the
    circle are discarded.
 
-2. **Reduce pass** (`rotation_reduce.wgsl`) — N² threads sum the K accumulation
-   buffers into a flat f32 output buffer.
+2. **Reduce pass** (`rotation_reduce.wgsl`) — one thread per cell converts the
+   fixed-point sum into the flat f32 output buffer.
 
 3. **Render pass** (`rotation_render.wgsl`) — a full-screen quad samples the output
    buffer and applies Reinhard tonemapping with orange/blue color encoding.
@@ -435,11 +442,11 @@ annulus of pair distances that contribute to Field B. Both are fractions of `gri
 - Pairs are included when their distance falls in `[pairDistance − distanceDelta, pairDistance + distanceDelta] × gridSize/2`.
 - `distanceDelta ≥ pairDistance` makes the inner radius clamp to 0 (pure disk, no hole).
 
-The annulus is precomputed CPU-side (`_rebuildAnnulusOffsets`) whenever either parameter
-changes and uploaded as a flat `i32` storage buffer (`[dCol0, dRow0, dCol1, dRow1, ...]`).
-The shader iterates this list directly — no distance check per pair, no bounding-box scan.
-The buffer is sized at `gridSize² × 8` bytes (safe upper bound; worst case ≈ 51k entries
-for a full inscribed disk at `gridSize=256`).
+The annulus is precomputed CPU-side (`_rebuildAnnulusSpans`) whenever either parameter
+changes and uploaded as a `vec4<i32>` storage buffer of runs `[dRow, dColStart, dColEnd, 0]`
+covering the half plane. The shader iterates the runs directly — no distance check per
+pair, no bounding-box scan. Each row holds at most two runs, so the buffer is sized at
+`(gridSize + 2) × 16` bytes.
 
 **Sample stride** reduces computation further: stride S samples every S-th cell in each
 axis, reducing contributing pairs by S². Field B brightness is auto-compensated by
@@ -462,7 +469,7 @@ regardless of the magnitude of the change. A CG or multigrid solver would elimin
 at significant GPU cost (global reductions per iteration).
 
 **Field B GPU load scales with N².** At gridSize=256 the compute shader dispatches 65536
-threads, each iterating the precomputed annulus offset list. Use `pairDistance`/`distanceDelta`
+threads, each iterating the precomputed annulus span table. Use `pairDistance`/`distanceDelta`
 to control annulus size and `sampleStride` to sub-sample the grid. The focus mask further
 reduces dispatch to O(R²) for the selected region.
 

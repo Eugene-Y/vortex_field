@@ -18,7 +18,10 @@ The same plan runs in a browser at `bench/rotation/?configs=…&scenarios=…&va
   (centers scattered — no contention). `simulated*` fields are captured from the production
   Navier–Stokes step with app defaults (`simulatedSpin` = the startup “Disk — spin” after 600 steps).
 - `RotationKernelGenerator.js` — builds kernels from orthogonal options so each idea is
-  measured alone and combined. The production shader is loaded from `src/` unchanged as the reference.
+  measured alone and combined.
+- `reference/` — the original CAS shaders from `main`, the reference every variant is
+  checked against. The `branch` variant runs the current `src/` shaders (this branch ports
+  the best variant there).
 - `RotationBenchmark.js` — one frame = clear + compute + reduce, as in the app. Reports GPU
   timestamps of the compute pass (median and min of 5 batches) and the error against the
   production output (`relL1 = Σ|x−ref| / Σ|ref|`, `relMax` relative to max |ref|).

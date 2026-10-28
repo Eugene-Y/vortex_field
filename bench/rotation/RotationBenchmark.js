@@ -17,7 +17,7 @@ const PARAMS_BYTE_SIZE        = 64;
 // Pathological contention can take seconds per frame; one probe frame is enough there.
 const SLOW_FRAME_MS           = 150;
 
-export const PRODUCTION_VARIANT = { name: 'production', production: true, accumulationBuffers: 32 };
+export const PRODUCTION_VARIANT = { name: 'production (main, CAS)', production: true, accumulationBuffers: 32 };
 
 function buildAnnulusOffsets(gridSize, pairDistance, distanceDelta) {
   const halfGrid    = gridSize / 2;
@@ -124,15 +124,18 @@ class VariantRuntime {
       : variant.aggregation === 'workgroup' ? 'fixed64' : variant.accumulation;
     this.accumulationBuffers = variant.accumulationBuffers;
     this.offsetSplit = variant.offsetSplit ?? 1;
+    this.maskOffsetSplit = variant.maskOffsetSplit ?? this.offsetSplit;
     this.offsetTable = variant.production ? 'full' : variant.offsetTable;
     this.cellOrder   = variant.cellOrder ?? 'rowMajor';
     this.workgroupSize = variant.workgroupSize ?? WORKGROUP_SIZE;
     this.velocitySource = variant.velocitySource ?? 'texture';
 
-    const constants = { ACCUMULATION_BUFFERS: variant.accumulationBuffers };
+    const constants = variant.branchShader ? {} : { ACCUMULATION_BUFFERS: variant.accumulationBuffers };
     if (accumulation === 'fixed32' || accumulation === 'fixed64') constants.FIXED_POINT_SCALE = variant.fixedPointScale;
-    const computeSource = variant.production ? productionSources.compute : buildVariantShader(variant);
-    const reduceSource  = variant.production ? productionSources.reduce  : buildReduceShader(accumulation);
+    const computeSource = variant.production ? productionSources.compute
+      : variant.branchShader ? productionSources.branchCompute : buildVariantShader(variant);
+    const reduceSource  = variant.production ? productionSources.reduce
+      : variant.branchShader ? productionSources.branchReduce : buildReduceShader(accumulation);
 
     this.computePipeline = device.createComputePipeline({
       layout: 'auto',
@@ -244,7 +247,8 @@ class BenchmarkCase {
     const computePass = encoder.beginComputePass(timestampWrites ? { timestampWrites: timestampWrites.compute } : {});
     computePass.setPipeline(bound.runtime.computePipeline);
     computePass.setBindGroup(0, bound.computeBindGroup);
-    computePass.dispatchWorkgroups(this._computeWorkgroupCount(bound.runtime), bound.runtime.offsetSplit);
+    computePass.dispatchWorkgroups(this._computeWorkgroupCount(bound.runtime),
+      this.mask ? bound.runtime.maskOffsetSplit : bound.runtime.offsetSplit);
     computePass.end();
     const reducePass = encoder.beginComputePass(timestampWrites ? { timestampWrites: timestampWrites.reduce } : {});
     reducePass.setPipeline(bound.runtime.reducePipeline);

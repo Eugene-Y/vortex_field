@@ -35,8 +35,10 @@ console.log(`adapter: ${adapter.info?.description} · timestamps ${timestampSupp
 await runRotationBenchmark({
   device,
   productionSources: {
-    compute: await readRepoText('src/shaders/rotation_compute.wgsl'),
-    reduce:  await readRepoText('src/shaders/rotation_reduce.wgsl'),
+    compute: await readRepoText('bench/rotation/reference/rotation_compute_cas.wgsl'),
+    reduce:  await readRepoText('bench/rotation/reference/rotation_reduce_cas.wgsl'),
+      branchCompute: await readRepoText('src/shaders/rotation_compute.wgsl'),
+      branchReduce:  await readRepoText('src/shaders/rotation_reduce.wgsl'),
   },
   configs:   configKeys.map(key => CONFIGS[key]),
   scenarios: scenarioKeys,
