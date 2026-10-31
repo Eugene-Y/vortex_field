@@ -9,10 +9,15 @@ import { ControlHintDisplay }      from './ui/ControlHintDisplay.js';
 import { PatternInjector }         from './interaction/PatternInjector.js';
 import { FocusMaskInteractor }     from './interaction/FocusMaskInteractor.js';
 import { FieldSnapshotSaver }      from './interaction/FieldSnapshotSaver.js';
-import { GRID_SIZE, DISPLAY_SCALE, DISPLAY_GAP, PHYSICS_DEFAULTS, GRAVITY_EXPERIMENT, buildShareUrl } from './config/SimulationConfig.js';
+import { RandomSceneShortcut }     from './interaction/RandomSceneShortcut.js';
+import { blockSelectTypeAhead }    from './ui/SelectTypeAheadBlocker.js';
+import { randomizeSceneSettings }  from './config/RandomSceneSettings.js';
+import { GRID_SIZE, DISPLAY_SCALE, DISPLAY_GAP, PHYSICS_DEFAULTS, GRAVITY_EXPERIMENT, START_PULSES, OPENED_FROM_CANONICAL_LINK, buildShareUrl, buildDefaultSettingsUrl } from './config/SimulationConfig.js';
 
 const RESERVED_VERTICAL_PX   = 180;
 const RESERVED_HORIZONTAL_PX = 48;
+
+const START_PATTERN_CENTER = [0.5, 0.5];
 
 const FIELD_LAYOUT      = computeFieldLayout();
 const CANVAS_FIELD_SIZE = FIELD_LAYOUT.fieldPixelSize;
@@ -179,7 +184,7 @@ async function main() {
     document.getElementById('page-description'),
     document.getElementById('control-hint'),
   );
-  patternInjector.queueInitialInjection([0.5, 0.5]);
+  blockSelectTypeAhead();
 
   let animationFrameId = null;
   let paused           = false;
@@ -198,6 +203,28 @@ async function main() {
   const snapshotSaver = new FieldSnapshotSaver(canvasMain, canvasRotation, () => {
     if (paused) renderFields();
   });
+
+  function queueStartPattern() {
+    patternInjector.queueInjectionSeries(START_PATTERN_CENTER, START_PULSES.count, START_PULSES.intervalSeconds);
+  }
+
+  function applyRandomSceneSettings() {
+    randomizeSceneSettings();
+    controlPanel.refreshFromConfig();
+    patternInjector.refreshFromConfig();
+    history.replaceState(null, '', buildShareUrl());
+  }
+
+  function restartWithRandomScene() {
+    applyRandomSceneSettings();
+    fluidField.reset();
+    queueStartPattern();
+    if (paused) renderFields();
+  }
+
+  new RandomSceneShortcut(restartWithRandomScene);
+  if (OPENED_FROM_CANONICAL_LINK) applyRandomSceneSettings();
+  queueStartPattern();
 
   function renderFrame() {
     // Apply input once per display frame — injections are not sub-stepped.
@@ -256,8 +283,7 @@ async function main() {
   clearMassButton.hidden = !GRAVITY_EXPERIMENT;
   clearMassButton.addEventListener('click', () => fluidField.clearDensity());
   document.getElementById('reset-button').addEventListener('click', () => {
-    const experimentQuery = GRAVITY_EXPERIMENT ? '?gravityExperiment=1' : '';
-    window.location.href = window.location.pathname + experimentQuery;
+    window.location.href = buildDefaultSettingsUrl();
   });
 
   document.getElementById('copy-url-button').addEventListener('click', () => {

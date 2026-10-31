@@ -37,7 +37,19 @@ export const DEFAULTS = {
   gravStrength:       5.0,
   gravIters:          20,
   densDamping:        0.999,
+  startPulses:        1,
+  startInterval:      0.25, // seconds between start pulses
+  colorCcw:           [1.0, 0.5, 0.0], // orange
+  colorCw:            [0.0, 0.6, 1.0], // blue
+  colorZero:          [0.0, 0.0, 0.0], // black
 };
+
+// A link with no query at all opens with random settings; Reset reloads with this key so it
+// gets the defaults instead.
+export const DEFAULT_SETTINGS_QUERY_KEY = 'defaults';
+export const OPENED_FROM_CANONICAL_LINK = _p.size === 0;
+
+export const BRUSH_STRENGTH_MAX = 500;
 
 const VEL_TONE_BASE  = 30.0;
 // After energy normalization the mean active cell has value ~1.0, so the tone
@@ -85,6 +97,12 @@ export const MOUSE_DEFAULTS = {
 
 export const PATTERN_DEFAULTS = {
   pattern: _str('pattern', 'disk-spin'),
+};
+
+// The pattern that starts the flow on load (and on R) is injected count times, intervalSeconds apart.
+export const START_PULSES = {
+  count:           _int('startPulses', DEFAULTS.startPulses, 1, 16),
+  intervalSeconds: _float('startInterval', DEFAULTS.startInterval),
 };
 
 // The mass/gravity experiment is hidden and inert unless the URL opts in with ?gravityExperiment=1,
@@ -157,6 +175,8 @@ export function buildShareUrl() {
     vorticity:     PHYSICS_DEFAULTS.vorticityStrength.toPrecision(3),
     pressureIters: PHYSICS_DEFAULTS.pressureIterations,
     pattern:       PATTERN_DEFAULTS.pattern,
+    startPulses:   START_PULSES.count,
+    startInterval: START_PULSES.intervalSeconds.toPrecision(3),
     velBrightness: BRIGHTNESS_SLIDER_POSITIONS.velocity,
     rotBrightness: BRIGHTNESS_SLIDER_POSITIONS.rotation,
     colorCcw:      rgbToHex(COLORS.rotationPositive),
@@ -180,11 +200,16 @@ export function buildShareUrl() {
   return `${window.location.origin}${window.location.pathname}?${params}`;
 }
 
-// Mutable: the Field B color pickers replace these arrays live.
+export function buildDefaultSettingsUrl() {
+  const experimentQuery = GRAVITY_EXPERIMENT ? '&gravityExperiment=1' : '';
+  return `${window.location.pathname}?${DEFAULT_SETTINGS_QUERY_KEY}${experimentQuery}`;
+}
+
+// Mutable: the Field B color pickers replace these arrays live, never edit them in place.
 export const COLORS = {
-  rotationPositive: _color('colorCcw',  [1.0, 0.5, 0.0]), // orange — counter-clockwise
-  rotationNegative: _color('colorCw',   [0.0, 0.6, 1.0]), // blue   — clockwise
-  rotationZero:     _color('colorZero', [0.0, 0.0, 0.0]), // black  — no contribution
+  rotationPositive: _color('colorCcw',  DEFAULTS.colorCcw),  // counter-clockwise
+  rotationNegative: _color('colorCw',   DEFAULTS.colorCw),   // clockwise
+  rotationZero:     _color('colorZero', DEFAULTS.colorZero), // no contribution
 };
 
 // Named physics model identifiers used by PhysicsRegistry.

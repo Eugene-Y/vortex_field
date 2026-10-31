@@ -11,6 +11,8 @@ const INJECT_HINT = 'Pattern added to Field A when you double-click Field B or p
 // Physical key, so the shortcut works whatever keyboard layout is active.
 const INJECT_KEY_CODE = 'KeyP';
 
+const MS_PER_SECOND = 1000;
+
 const PATTERNS = [
   { value: 'disk-spin',    label: 'Disk — spin'        },
   { value: 'disk-explode', label: 'Disk — explode'     },
@@ -62,6 +64,7 @@ export class PatternInjector {
     this._fieldSize      = fieldSize;
     this._displayGap     = displayGap;
     this._pending        = null;
+    this._series         = null;
     this._hoveredPointer = null;
     this._select         = this._buildDropdown(patternSizeRow);
 
@@ -81,13 +84,24 @@ export class PatternInjector {
     this._execute(this._select.value, center);
   }
 
-  // Queues an injection to be applied on the next renderFrame call.
-  // Use this for startup injection to guarantee a stable GPU state.
-  queueInitialInjection(center) {
-    this._pending = { action: this._select.value, center };
+  // Injects the selected pattern pulseCount times, pulseIntervalSeconds apart, starting on the next
+  // renderFrame call, so a startup injection meets a stable GPU state. Replaces an unfinished series.
+  queueInjectionSeries(center, pulseCount, pulseIntervalSeconds) {
+    this._series = {
+      action:          this._select.value,
+      center,
+      remainingPulses: pulseCount,
+      intervalMs:      pulseIntervalSeconds * MS_PER_SECOND,
+      nextPulseMs:     null,
+    };
+  }
+
+  refreshFromConfig() {
+    this._select.value = PATTERN_DEFAULTS.pattern;
   }
 
   applyPendingPattern() {
+    this._applyDueSeriesPulse();
     if (!this._pending) return;
     const { action, center } = this._pending;
     this._pending = null;
@@ -186,6 +200,19 @@ export class PatternInjector {
 
     if (u < 0 || u > 1 || v < 0 || v > 1) return null;
     return [u, v];
+  }
+
+  // Each pulse is due a whole number of intervals after the first, so a slow frame delays one
+  // pulse without shifting the rest.
+  _applyDueSeriesPulse() {
+    const series = this._series;
+    if (!series) return;
+    const nowMs = performance.now();
+    if (series.nextPulseMs !== null && nowMs < series.nextPulseMs) return;
+    series.nextPulseMs = (series.nextPulseMs ?? nowMs) + series.intervalMs;
+    this._execute(series.action, series.center);
+    series.remainingPulses--;
+    if (series.remainingPulses === 0) this._series = null;
   }
 
   _execute(action, center) {

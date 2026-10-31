@@ -48,6 +48,7 @@ src/
   main.js                       — bootstrap, canvas sizing, render loop
   config/
     SimulationConfig.js         — all named constants; single source of truth
+    RandomSceneSettings.js      — random starting scene written into the live config
   simulation/
     FluidField.js               — Field A: wraps physics step, exposes velocityTexture
     WebGPUNavierStokesStep.js   — physics step (advection, pressure projection,
@@ -59,9 +60,11 @@ src/
     PatternInjector.js          — double-click / P-key injection of velocity patterns on Field B
     FocusMaskInteractor.js      — click/drag on Field B to restrict rotation to a focus circle
     FieldSnapshotSaver.js       — ↓ saves both fields as vortex_a/b_YYYYMMDD_HHMMSS.png
+    RandomSceneShortcut.js      — R restarts with random scene settings
   ui/
     ControlPanel.js             — all DOM slider creation and wiring
     ControlHintDisplay.js       — shows the hovered/focused control's data-hint in the description area
+    SelectTypeAheadBlocker.js   — stops dropdowns from jumping to an option on a typed letter
   gpu/
     WebGPUDevice.js             — WebGPU adapter/device acquisition
     UniformWriter.js            — sequential writer for WebGPU uniform buffers
@@ -116,10 +119,12 @@ excuse sloppy code. The following rules apply without exception.
 
 **State**
 - No shared mutable globals. State lives in class instances passed explicitly.
-- Exception: `PHYSICS_DEFAULTS`, `MOUSE_DEFAULTS`, `ROTATION_FIELD`, and `COLORS` in
-  `SimulationConfig.js` are intentionally mutable — the UI writes to them and the
-  simulation reads them live each frame, so slider changes take effect immediately
-  without any extra wiring.
+- Exception: `PHYSICS_DEFAULTS`, `MOUSE_DEFAULTS`, `ROTATION_FIELD`, `PATTERN_DEFAULTS`,
+  `START_PULSES` and `COLORS` in `SimulationConfig.js` are intentionally mutable — the UI
+  writes to them and the simulation reads them live each frame, so slider changes take
+  effect immediately without any extra wiring. When anything else writes them (the random
+  scene), `ControlPanel.refreshFromConfig()` and `PatternInjector.refreshFromConfig()` make
+  the controls show the new values: every control registers how to show its config value.
 
 ## Layout
 
@@ -222,6 +227,8 @@ export const COLORS = {
 Physics sliders appear below Field A. Brightness sliders appear below their respective field.
 Double-clicking any slider resets it to its value in `DEFAULTS` (not the URL value it
 loaded with); every slider helper takes that default next to its getter and setter.
+Dropdowns ignore typed letters (`SelectTypeAheadBlocker.js`), so P and R stay shortcuts
+after a dropdown was used.
 
 Current sliders:
 - **Brightness** (under each field) — adjusts tone midpoints
@@ -252,8 +259,10 @@ Current sliders:
 A dropdown below Field B selects the injection pattern. Double-clicking or pressing P
 (matched by physical key `KeyP`, so any layout works; ignored with Cmd/Ctrl/Alt, on key
 repeat and while typing in a text field) injects at that UV position in Field A space. Uses current brush radius/strength. Adds to existing
-velocity, never resets it. Initial pattern is queued for first render frame (not applied
-at startup) to guarantee a stable GPU state.
+velocity, never resets it. The start pattern is injected at the field center
+`START_PULSES.count` times, `START_PULSES.intervalSeconds` apart (URL: `startPulses`,
+`startInterval`); the first pulse is queued for the first render frame (not applied at
+startup) to guarantee a stable GPU state.
 
 Current patterns:
 - **Disk — spin / explode / implode** — filled disk injected via single shader pass
@@ -278,6 +287,24 @@ Current patterns:
 - Impulse strength is speed-scaled: `strength = impulseStrength × (1 − sensitivity + sensitivity × speedFactor)`
   where `speedFactor = pixelsPerSecond / MOUSE_SPEED_REFERENCE`; `speedSensitivity = 0`
   gives constant strength, `= 1` scales fully with mouse velocity
+
+**Random scene** (`RandomSceneSettings.js`, `RandomSceneShortcut.js`): a link with no query
+at all (`OPENED_FROM_CANONICAL_LINK`) opens with random settings, written to the URL at once,
+so a reload keeps them. R (physical `KeyR`; ignored with Cmd/Ctrl/Alt, on key repeat and
+while typing in a text field) draws new ones, clears the velocity and replays the start
+pattern. Reset loads `?defaults` (`buildDefaultSettingsUrl()`), which gets plain `DEFAULTS`.
+Each setting is drawn independently:
+- Show contribution — CCW only / CW only / both
+- Palette — the default orange / black / blue, or CCW black / zero gray / CW white
+- Pattern — disk spin / disk explode / circle
+- Boundary — wrap / absorb / reflect
+- dt — 0.5–5, half the draws ≤ 1; log-uniform within each half
+- Vorticity — uniform 0–2
+- Incompressibility — one of 17 evenly spaced pressure-iteration counts from 1 to 100
+- Brush strength — log-uniform from the default to the slider maximum
+- Pattern size — uniform 0.1–1
+- Start pulses — 1–4, 0.125–0.5 s apart
+- Pair distance — log-uniform 0.003–1, like its slider
 
 **Snapshots** (`FieldSnapshotSaver.js`): ↓ (ignored with modifiers, on key repeat and while a
 form control has focus) saves both fields as PNG at one pixel per grid cell. A WebGPU

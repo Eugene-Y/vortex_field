@@ -1,6 +1,6 @@
 'use strict';
 
-import { DEFAULTS, RENDER_DEFAULTS, BRIGHTNESS_SLIDER_POSITIONS, PHYSICS_DEFAULTS, MOUSE_DEFAULTS, ROTATION_FIELD, VEL_LOG_RANGE, ROT_DIM_LOG_RANGE, ROT_BRIGHT_LOG_RANGE, DENS_LOG_RANGE, GRAVITY, GRAVITY_EXPERIMENT, BRUSH, COLORS, rgbToHex, hexToRgb } from '../config/SimulationConfig.js';
+import { DEFAULTS, RENDER_DEFAULTS, BRIGHTNESS_SLIDER_POSITIONS, PHYSICS_DEFAULTS, MOUSE_DEFAULTS, ROTATION_FIELD, VEL_LOG_RANGE, ROT_DIM_LOG_RANGE, ROT_BRIGHT_LOG_RANGE, DENS_LOG_RANGE, GRAVITY, GRAVITY_EXPERIMENT, BRUSH, COLORS, BRUSH_STRENGTH_MAX, rgbToHex, hexToRgb } from '../config/SimulationConfig.js';
 
 const VEL_TONE_BASE  = 30.0;
 const ROT_TONE_BASE  = 1.0;
@@ -53,6 +53,7 @@ const CONTROL_HINTS = {
 
 export class ControlPanel {
   constructor(velocityContainer, rotationContainer, physicsContainer, fieldSize, gapSize) {
+    this._configRefreshers = [];
     velocityContainer.style.width = `${fieldSize}px`;
     rotationContainer.style.width = `${fieldSize}px`;
 
@@ -64,6 +65,11 @@ export class ControlPanel {
     this._addAutoNormalizeButton(rotBrightnessRow);
 
     this._buildPhysicsSliders(physicsContainer);
+  }
+
+  // Shows the current config values in every control, after something other than the controls changed it.
+  refreshFromConfig() {
+    for (const showConfigValue of this._configRefreshers) showConfigValue();
   }
 
   // Returns the pattern-size row so PatternInjector can append the inject dropdown to it.
@@ -92,7 +98,7 @@ export class ControlPanel {
       container,
       label: 'Sample stride',
       steps: 5,
-      initialSliderValue: Math.log2(ROTATION_FIELD.sampleStride),
+      readSliderValue: () => Math.log2(ROTATION_FIELD.sampleStride),
       defaultSliderValue: Math.log2(DEFAULTS.sampleStride),
       formatValue: v => String(2 ** Math.round(v)),
       onChange: v => { ROTATION_FIELD.sampleStride = 2 ** Math.round(v); },
@@ -116,7 +122,7 @@ export class ControlPanel {
       DEFAULTS.brushRadius,
       CONTROL_HINTS.brushRadius
     );
-    this._appendLogSlider(brushRow, 'Strength', 1, 500,
+    this._appendLogSlider(brushRow, 'Strength', 1, BRUSH_STRENGTH_MAX,
       () => MOUSE_DEFAULTS.impulseStrength,
       v => { MOUSE_DEFAULTS.impulseStrength = v; },
       DEFAULTS.brushStrength,
@@ -162,7 +168,7 @@ export class ControlPanel {
       container,
       label: 'Vorticity',
       steps: 100,
-      initialSliderValue: vorticityToSliderValue(PHYSICS_DEFAULTS.vorticityStrength),
+      readSliderValue: () => vorticityToSliderValue(PHYSICS_DEFAULTS.vorticityStrength),
       defaultSliderValue: vorticityToSliderValue(DEFAULTS.vorticity),
       formatValue: t => (VORTICITY_MAX * Math.pow(t / 100, VORTICITY_EXPONENT)).toFixed(2),
       onChange:    t => { PHYSICS_DEFAULTS.vorticityStrength = VORTICITY_MAX * Math.pow(t / 100, VORTICITY_EXPONENT); },
@@ -193,11 +199,10 @@ export class ControlPanel {
 
     const makeMode = (mode, text) => {
       const btn = this._createToggleButton(text);
-      this._showToggleActive(btn, BRUSH.mode === mode);
+      this._bindToggleToConfig(btn, () => BRUSH.mode === mode);
       btn.addEventListener('click', () => {
         BRUSH.mode = mode;
-        this._showToggleActive(impulseBtn, BRUSH.mode === 'impulse');
-        this._showToggleActive(massBtn,    BRUSH.mode === 'mass');
+        this.refreshFromConfig();
         btn.dispatchEvent(new Event('input', { bubbles: true }));
       });
       return btn;
@@ -222,10 +227,10 @@ export class ControlPanel {
     wrapper.appendChild(label);
 
     const btn = this._createToggleButton('Enable');
-    this._showToggleActive(btn, GRAVITY.enabled);
+    const showEnabled = this._bindToggleToConfig(btn, () => GRAVITY.enabled);
     btn.addEventListener('click', () => {
       GRAVITY.enabled = !GRAVITY.enabled;
-      this._showToggleActive(btn, GRAVITY.enabled);
+      showEnabled();
       btn.dispatchEvent(new Event('input', { bubbles: true }));
     });
     wrapper.appendChild(btn);
@@ -261,7 +266,7 @@ export class ControlPanel {
     return this._addSlider({
       container,
       label,
-      initialSliderValue,
+      readSliderValue: () => BRIGHTNESS_SLIDER_POSITIONS[positionKey],
       defaultSliderValue,
       formatValue: null,
       onChange: applyPosition,
@@ -272,10 +277,10 @@ export class ControlPanel {
   _addAutoNormalizeButton(row) {
     const btn = this._createToggleButton('Auto');
     this._setHint(btn, CONTROL_HINTS.autoNormalize);
-    this._showToggleActive(btn, ROTATION_FIELD.autoNormalize);
+    const showAutoNormalize = this._bindToggleToConfig(btn, () => ROTATION_FIELD.autoNormalize);
     btn.addEventListener('click', () => {
       ROTATION_FIELD.autoNormalize ^= 1;
-      this._showToggleActive(btn, ROTATION_FIELD.autoNormalize);
+      showAutoNormalize();
       btn.dispatchEvent(new Event('input', { bubbles: true }));
     });
     row.appendChild(btn);
@@ -294,7 +299,7 @@ export class ControlPanel {
     this._addSlider({
       container,
       label,
-      initialSliderValue: clampedSliderValue(getValue()),
+      readSliderValue: () => clampedSliderValue(getValue()),
       defaultSliderValue: clampedSliderValue(defaultValue),
       steps,
       formatValue: sliderValue => fromSlider(sliderValue).toFixed(decimals),
@@ -307,7 +312,7 @@ export class ControlPanel {
     this._addSlider({
       container,
       label,
-      initialSliderValue: linearSliderValue(getValue(), min, max),
+      readSliderValue: () => linearSliderValue(getValue(), min, max),
       defaultSliderValue: linearSliderValue(defaultValue, min, max),
       formatValue: sliderValue => {
         const v = Math.round(min + (max - min) * sliderValue / 100);
@@ -327,7 +332,7 @@ export class ControlPanel {
     return this._addSlider({
       container,
       label,
-      initialSliderValue: linearSliderValue(getValue(), min, max),
+      readSliderValue: () => linearSliderValue(getValue(), min, max),
       defaultSliderValue,
       formatValue: sliderValue => sliderValueToNatural(sliderValue).toFixed(2),
       onChange:    sliderValue => { setValue(sliderValueToNatural(sliderValue)); },
@@ -368,7 +373,7 @@ export class ControlPanel {
       return v < 0.001 ? v.toExponential(1) : v.toPrecision(3);
     };
     return {
-      initialSliderValue: naturalToSliderValue(getValue()),
+      readSliderValue: () => naturalToSliderValue(getValue()),
       defaultSliderValue,
       steps,
       formatValue,
@@ -413,11 +418,10 @@ export class ControlPanel {
 
     const makeBit = (bit, text) => {
       const btn = this._createToggleButton(text);
-      const active = () => !!(ROTATION_FIELD.showMask & bit);
-      this._showToggleActive(btn, active());
+      const showActive = this._bindToggleToConfig(btn, () => ROTATION_FIELD.showMask & bit);
       btn.addEventListener('click', () => {
         ROTATION_FIELD.showMask ^= bit;
-        this._showToggleActive(btn, active());
+        showActive();
         btn.dispatchEvent(new Event('input', { bubbles: true }));
       });
       return btn;
@@ -454,7 +458,7 @@ export class ControlPanel {
     const picker = document.createElement('input');
     picker.type = 'color';
     picker.className = 'color-swatch';
-    picker.value = `#${rgbToHex(getColor())}`;
+    this._bindToConfig(() => { picker.value = `#${rgbToHex(getColor())}`; });
     picker.setAttribute('aria-label', label);
     this._setHint(picker, hint);
     picker.addEventListener('input', () => setColor(hexToRgb(picker.value.slice(1))));
@@ -470,6 +474,18 @@ export class ControlPanel {
 
   _showToggleActive(btn, active) {
     btn.classList.toggle('active', Boolean(active));
+  }
+
+  // Returns the function that shows the toggle's current config state.
+  _bindToggleToConfig(btn, isActive) {
+    return this._bindToConfig(() => this._showToggleActive(btn, isActive()));
+  }
+
+  // Shows the config value now and again on every refreshFromConfig(); returns showConfigValue.
+  _bindToConfig(showConfigValue) {
+    showConfigValue();
+    this._configRefreshers.push(showConfigValue);
+    return showConfigValue;
   }
 
   // ControlHintDisplay shows the nearest data-hint of whatever the pointer or focus is on.
@@ -488,14 +504,13 @@ export class ControlPanel {
 
     const select = document.createElement('select');
     select.className = 'pattern-select';
-    const current = getValue();
     for (const { value, label: text } of options) {
       const option = document.createElement('option');
       option.value = value;
       option.textContent = text;
-      if (value === current) option.selected = true;
       select.appendChild(option);
     }
+    this._bindToConfig(() => { select.value = getValue(); });
     select.addEventListener('input', () => setValue(parseInt(select.value, 10)));
 
     wrapper.appendChild(labelEl);
@@ -504,16 +519,17 @@ export class ControlPanel {
     return wrapper;
   }
 
-  _addSlider({ container, label, initialSliderValue, defaultSliderValue, formatValue, onChange, hint = null, steps = 100 }) {
+  // readSliderValue returns the slider position that shows the current config value.
+  _addSlider({ container, label, readSliderValue, defaultSliderValue, formatValue, onChange, hint = null, steps = 100 }) {
     const wrapper = document.createElement('div');
     wrapper.className = 'control-row';
-    wrapper.appendChild(this._createSliderBox({ label, initialSliderValue, defaultSliderValue, formatValue, onChange, hint, steps }));
+    wrapper.appendChild(this._createSliderBox({ label, readSliderValue, defaultSliderValue, formatValue, onChange, hint, steps }));
     container.appendChild(wrapper);
     return wrapper;
   }
 
   // A rectangle whose whole area is the range input; label and value are drawn on top of it.
-  _createSliderBox({ label, initialSliderValue, defaultSliderValue, formatValue, onChange, hint = null, steps = 100 }) {
+  _createSliderBox({ label, readSliderValue, defaultSliderValue, formatValue, onChange, hint = null, steps = 100 }) {
     const box = document.createElement('div');
     box.className = 'slider-box';
     this._setHint(box, hint ? `${hint} ${RESET_HINT}` : RESET_HINT);
@@ -523,7 +539,6 @@ export class ControlPanel {
     slider.min = 0;
     slider.max = steps;
     slider.step = 1;
-    slider.value = initialSliderValue;
     slider.setAttribute('aria-label', label);
 
     const labelEl = document.createElement('span');
@@ -537,7 +552,10 @@ export class ControlPanel {
       box.style.setProperty('--fill', `${sliderValue / steps * 100}%`);
       if (formatValue) valueEl.textContent = formatValue(sliderValue);
     };
-    showSliderValue(initialSliderValue);
+    this._bindToConfig(() => {
+      slider.value = readSliderValue();
+      showSliderValue(parseFloat(slider.value));
+    });
 
     slider.addEventListener('input', () => {
       const sliderValue = parseFloat(slider.value);

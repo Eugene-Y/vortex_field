@@ -17,7 +17,11 @@ produces them.
 - **Field B — rotation centers.** For every pair of cells at the chosen distance, the two
   velocity normals intersect at the pair's center of rotation; the pair's angular velocity
   is added to the cell where that center lands. Orange is counter-clockwise, blue is
-  clockwise, brightness is strength. Only CCW is shown at first — toggle **CW** to see both.
+  clockwise, brightness is strength (by default; the colors are adjustable).
+
+Each visit to the plain link starts from a random scene: random start pattern, palette,
+boundary, flow settings and which rotation directions Field B shows. **Reset** restores the
+defaults.
 
 ## Controls
 
@@ -27,6 +31,7 @@ produces them.
 | double-click on Field B, or **P** over either field | inject the pattern selected in **Inject** at that point |
 | click or drag on Field B | focus circle: compute Field B only inside it (the brush radius sets its size); click it again or press **Esc** to clear |
 | double-click a slider | reset it to its default |
+| **R** | random scene: new settings, cleared flow, new start pattern |
 | **↓** | save both fields as `vortex_a_…png` and `vortex_b_…png` |
 | **Copy URL** | a link that reproduces the current settings exactly |
 
