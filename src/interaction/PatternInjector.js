@@ -12,6 +12,7 @@ const INJECT_HINT = 'Pattern added to Field A when you double-click Field B or p
 const INJECT_KEY_CODE = 'KeyP';
 
 const MS_PER_SECOND = 1000;
+const U32_RANGE     = 2 ** 32;
 
 const PATTERNS = [
   { value: 'disk-spin',    label: 'Disk — spin'        },
@@ -327,32 +328,15 @@ export class PatternInjector {
     this._injectDisk(center, patternRadius, strength, modeIndex);
   }
 
-  // At radius ≤ 1 every grid cell gets its own random value via a GPU shader pass.
-  // At radius > 1 the field is tiled with overlapping Gaussian impulses.
+  // Blobs of the brush radius over the whole field, or one value per cell at radius ≤ 1.
   _injectNoise() {
-    const brushRadius = MOUSE_DEFAULTS.impulseRadius;
-    const strength    = MOUSE_DEFAULTS.impulseStrength;
-
-    if (brushRadius <= 1) {
-      if (BRUSH.mode === 'mass') {
-        this._fluidField.addDensityNoise(strength, Math.random());
-      } else {
-        this._fluidField.addNoise(strength, Math.random());
-      }
-      return;
-    }
-
-    const stepUv = (brushRadius * INJECTION_STEP_FRACTION) / GRID_SIZE;
-    const cols   = Math.ceil(1 / stepUv) + 1;
-    const rows   = Math.ceil(1 / stepUv) + 1;
-
-    for (let row = 0; row < rows; row++) {
-      for (let col = 0; col < cols; col++) {
-        const u     = col * stepUv;
-        const v     = row * stepUv;
-        const angle = Math.random() * 2 * Math.PI;
-        this._injectImpulse([u, v], [Math.cos(angle), Math.sin(angle)], brushRadius, strength);
-      }
+    const blobRadius = MOUSE_DEFAULTS.impulseRadius;
+    const strength   = MOUSE_DEFAULTS.impulseStrength;
+    const seed       = Math.floor(Math.random() * U32_RANGE);
+    if (BRUSH.mode === 'mass') {
+      this._fluidField.addDensityNoise(strength, seed, blobRadius);
+    } else {
+      this._fluidField.addNoise(strength, seed, blobRadius);
     }
   }
 

@@ -44,8 +44,8 @@ export class FluidField {
     this._physicsStep.injectDisk(center, radiusUv, strength, mode);
   }
 
-  addNoise(strength, seed) {
-    this._physicsStep.injectNoise(strength, seed);
+  addNoise(strength, seed, blobRadius) {
+    this._physicsStep.injectNoise(strength, seed, blobRadius);
   }
 
   injectDensityImpulse(position, radius, strength) {
@@ -56,8 +56,8 @@ export class FluidField {
     this._physicsStep.injectDensityDisk(center, radiusUv, strength);
   }
 
-  addDensityNoise(strength, seed) {
-    this._physicsStep.injectDensityNoise(strength, seed);
+  addDensityNoise(strength, seed, blobRadius) {
+    this._physicsStep.injectDensityNoise(strength, seed, blobRadius);
   }
 
   clearDensity() {

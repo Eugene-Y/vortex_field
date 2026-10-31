@@ -77,7 +77,9 @@ src/
     velocity_inject_disk.wgsl         — single-pass filled disk (spin/explode/implode)
     velocity_vorticity_curl.wgsl      — computes scalar curl field
     velocity_vorticity_confinement.wgsl — applies confinement force to re-energise vortices
-    velocity_noise.wgsl               — per-cell pseudo-random velocity
+    velocity_noise.wgsl               — random velocity, per cell or in lattice blobs
+    noise_lattice.wgsl                — NoiseParams, hash and lattice helpers; prepended to
+                                        both noise shaders by main.js (WGSL has no include)
     velocity_render.wgsl              — render pipeline: Reinhard tonemapping + HSV encoding
     rotation_compute.wgsl             — WGSL compute: accumulates ω into 64-bit fixed-point sums
     rotation_reduce.wgsl              — WGSL compute: fixed-point sums → flat f32 output buffer
@@ -272,7 +274,11 @@ Current patterns:
 - **Square grid lines** — crossing orthogonal jets
 - **Triangular grid lines** — three families at 0°/60°/120°
 - **Scattered points** — hexagonal packing, radially outward
-- **Random noise** — per-cell pseudo-random velocity via `velocity_noise.wgsl`
+- **Random noise** — one pass of `velocity_noise.wgsl` over the whole field: at brush radius
+  ≤ 1 a random direction per cell; above that, Gaussian blobs of the brush radius with random
+  directions on a lattice spaced `0.75 × radius` (periodic in Wrap mode). Each cell sums only
+  the nodes within 3 radii (~81), so the pass takes a few ms at any radius. Never build it from
+  `injectImpulse` calls: each is a full-grid dispatch. Mass mode (`density_inject_noise.wgsl`) does the same with random amounts
 
 **Mouse injection** (`MouseInjector.js`):
 - `pointerdown` on Field A canvas starts a stroke; presses on Field B are ignored
@@ -464,7 +470,7 @@ The code must be written so the following changes require minimal surgery:
   - `step(deltaTime)`
   - `injectImpulse(position, direction, radius, strength)`
   - `injectDisk(center, radiusUv, strength, mode)`
-  - `injectNoise(strength, seed)`
+  - `injectNoise(strength, seed, blobRadius)`
   - `clearVelocity()`
   - `renderToCanvas()`
   - `get velocityTexture`  — current GPUTexture (rg32float)

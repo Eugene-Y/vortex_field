@@ -12,6 +12,9 @@ const WORKGROUP_SIZE = 8; // threads per dimension; dispatch is ceil(N/8) × cei
 const PRESSURE_ITERATIONS_PER_DISPATCH = 4;
 const PRESSURE_TILE_SIZE               = 32;  // must match TILE_SIZE in velocity_pressure.wgsl
 
+// Noise blobs sit this fraction of their radius apart, so neighbours overlap and leave no gaps.
+const NOISE_LATTICE_SPACING_FRACTION = 0.75;
+
 /**
  * Physics step implementation: incompressible Navier-Stokes, fully on WebGPU.
  *
@@ -19,7 +22,7 @@ const PRESSURE_TILE_SIZE               = 32;  // must match TILE_SIZE in velocit
  *   step(deltaTime)
  *   injectImpulse(position, direction, radius, strength)
  *   injectDisk(center, radiusUv, strength, mode)
- *   injectNoise(strength, seed)
+ *   injectNoise(strength, seed, blobRadius)
  *   clearVelocity()
  *   renderToCanvas()
  *   get velocityTexture   — current GPUTexture (rg32float)
@@ -69,7 +72,7 @@ export class WebGPUNavierStokesStep {
     this._confinementParamsBuffer = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     this._impulseParamsBuffer     = device.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     this._diskParamsBuffer        = device.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-    this._noiseParamsBuffer       = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    this._noiseParamsBuffer       = device.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     this._renderParamsBuffer      = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
 
     // Uniform buffers — density field and gravity.
@@ -78,7 +81,7 @@ export class WebGPUNavierStokesStep {
     this._gravityForceParamsBuffer   = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     this._densityImpulseParamsBuffer = device.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     this._densityDiskParamsBuffer    = device.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-    this._densityNoiseParamsBuffer   = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    this._densityNoiseParamsBuffer   = device.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
 
     // Build compute and render pipelines — velocity field.
     this._advectPipeline       = this._buildComputePipeline(shaderSources.advect,               'advectVelocity');
@@ -193,9 +196,12 @@ export class WebGPUNavierStokesStep {
     this._swapVelocity();
   }
 
-  /** Adds per-cell pseudo-random velocity. */
-  injectNoise(strength, seed) {
-    this._writeNoiseParams(strength, seed);
+  /**
+   * Adds random velocity: a random direction per cell when blobRadius (grid cells) ≤ 1,
+   * otherwise overlapping Gaussian blobs of that radius with random directions. seed is a u32.
+   */
+  injectNoise(strength, seed, blobRadius) {
+    this._writeNoiseParams(this._noiseParamsBuffer, strength, seed, blobRadius);
     this._submitSingleCompute(this._noisePipeline, this._cachedBindGroup(this._buildNoiseBindGroup));
     this._swapVelocity();
   }
@@ -240,9 +246,9 @@ export class WebGPUNavierStokesStep {
     this._swapDensity();
   }
 
-  /** Adds per-cell pseudo-random density. */
-  injectDensityNoise(strength, seed) {
-    this._writeDensityNoiseParams(strength, seed);
+  /** Adds random density, per cell or in blobs, like injectNoise. */
+  injectDensityNoise(strength, seed, blobRadius) {
+    this._writeNoiseParams(this._densityNoiseParamsBuffer, strength, seed, blobRadius);
     this._submitSingleCompute(this._densityNoisePipeline, this._cachedBindGroup(this._buildDensityNoiseBindGroup));
     this._swapDensity();
   }
@@ -458,14 +464,19 @@ export class WebGPUNavierStokesStep {
       .writeBuffer(this._device, this._diskParamsBuffer);
   }
 
-  _writeNoiseParams(strength, seed) {
-    // Field order must match struct NoiseParams in velocity_noise.wgsl.
-    new UniformWriter(16)
+  _writeNoiseParams(paramsBuffer, strength, seed, blobRadius) {
+    const latticeNodesPerSide = Math.max(1, Math.ceil(this._gridSize / (NOISE_LATTICE_SPACING_FRACTION * blobRadius)));
+    // Field order must match struct NoiseParams in noise_lattice.wgsl.
+    new UniformWriter(32)
       .u32(this._gridSize)
-      .pad()
-      .f32(seed)
+      .u32(PHYSICS_DEFAULTS.boundaryMode)
+      .u32(seed)
+      .u32(latticeNodesPerSide)
       .f32(strength)
-      .writeBuffer(this._device, this._noiseParamsBuffer);
+      .f32(blobRadius)
+      .pad()
+      .pad()
+      .writeBuffer(this._device, paramsBuffer);
   }
 
   _writeRenderParams() {
@@ -538,16 +549,6 @@ export class WebGPUNavierStokesStep {
       .pad()
       .pad()
       .writeBuffer(this._device, this._densityDiskParamsBuffer);
-  }
-
-  _writeDensityNoiseParams(strength, seed) {
-    // Field order must match struct DensityNoiseParams in density_inject_noise.wgsl.
-    new UniformWriter(16)
-      .u32(this._gridSize)
-      .pad()
-      .f32(seed)
-      .f32(strength)
-      .writeBuffer(this._device, this._densityNoiseParamsBuffer);
   }
 
   // ─── Bind group builders ─────────────────────────────────────────────────────
